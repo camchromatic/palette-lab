@@ -1,0 +1,1848 @@
+<!doctype html>
+<!-- Code written with help from Claude Opus 5.5 (Anthropic). Art and design by Cam Garcia. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Palette Lab</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<style>
+/* Layout: one-screen workbench on desktop — palette + hex codes | color editor | image picker (fills the height);
+   two columns on tablets, one on phones. */
+:root {
+  /* Procreate light interface (matched by eye: neutral greys, Procreate blue) */
+  --bg: #e4e4e6;
+  --surface: #f8f8f8;
+  --ink: #1c1c1e;
+  --muted: #6c6c70;
+  --line: #d1d1d6;
+  --accent: #0a7cff;
+  --accent-ink: #ffffff;
+  --slot-empty: #e9e9eb;
+  --danger: #d6342c;
+  /* Arial everywhere (Cam's call), hex codes and the exported card included */
+  --font-display: Arial, Helvetica, sans-serif;
+  --font-body: Arial, Helvetica, sans-serif;
+  --font-mono: Arial, Helvetica, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* Procreate dark interface (matched by eye) */
+    --bg: #111111; --surface: #1f1f1f; --ink: #f2f2f2; --muted: #9a9a9e; --line: #363636;
+    --accent: #2f8cff; --accent-ink: #ffffff; --slot-empty: #2a2a2a; --danger: #ff5f57;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111111; --surface: #1f1f1f; --ink: #f2f2f2; --muted: #9a9a9e; --line: #363636;
+  --accent: #2f8cff; --accent-ink: #ffffff; --slot-empty: #2a2a2a; --danger: #ff5f57;
+  color-scheme: dark;
+}
+/* Gray: neutral mid-grey between light and dark, so colors aren't skewed by a bright or black surround */
+:root[data-theme="gray"] {
+  --bg: #4a4a4d; --surface: #575759; --ink: #f4f4f5; --muted: #d0d0d4; --line: #6c6c70;
+  --accent: #2f8cff; --accent-ink: #ffffff; --slot-empty: #505053; --danger: #ffc2bb;
+  color-scheme: dark;
+}
+/* fainter outline for buttons and switches */
+:root { --line-soft: color-mix(in srgb, var(--line) 80%, var(--surface)); }
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
+code, kbd { font-family: var(--font-mono); }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(28px, 5vw, 40px); line-height: 1; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
+.sub { color: var(--muted); margin: 6px 0 0; max-width: 60ch; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.actions-wrap { display: flex; flex-direction: column; gap: 8px; }
+button, .btn {
+  font: 600 13px/1 var(--font-body); padding: 9px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line-soft); background: var(--surface); color: var(--ink);
+}
+button:hover, .btn:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible, textarea:focus-visible, .slot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button:disabled { opacity: .45; cursor: default; }
+button.danger { color: var(--danger); }
+.bench { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.col-image { grid-column: 1 / -1; }
+@media (max-width: 760px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.hex-body { display: flex; flex-direction: column; gap: 8px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.label { font: 500 11px/1 var(--font-body); text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+.name-row { display: flex; flex-direction: column; gap: 6px; }
+#paletteName {
+  font: 700 22px/1.2 var(--font-display); color: var(--ink); background: transparent; border: none;
+  border-bottom: 1px dashed var(--line); padding: 2px 0 6px; width: 100%;
+}
+#paletteName::placeholder { color: var(--muted); font-weight: 400; opacity: 1; }
+.example-tag { display: inline-block; font: 500 11px/1 var(--font-body); letter-spacing: .06em; text-transform: uppercase; padding: 5px 8px; border-radius: 99px; background: var(--slot-empty); color: var(--muted); }
+button.example-tag { border: 1px solid var(--line); cursor: pointer; }
+button.example-tag:hover { color: var(--ink); border-color: var(--muted); }
+.presets { display: flex; gap: 4px; }
+button.example-tag:disabled { opacity: .45; cursor: default; color: var(--muted); border-color: var(--line); }
+.grid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
+.slot {
+  aspect-ratio: 1; max-width: 100%; border-radius: 8px; border: 1px solid var(--line); cursor: pointer; padding: 0;
+  background: var(--slot-empty); position: relative;
+}
+.slot.empty { border: 1px dashed var(--line); background: transparent; }
+.slot.selected { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+.slot.drop { box-shadow: 0 0 0 2px var(--accent); }
+.slot.dragging { opacity: .35; }
+/* insert mode: a bar in the gap where the swatch will land */
+.slot.ins-before::before, .slot.ins-after::before {
+  content: ""; position: absolute; top: -4px; bottom: -4px; width: 4px; border-radius: 2px;
+  background: var(--accent); box-shadow: 0 0 0 2px var(--surface); pointer-events: none; z-index: 1;
+}
+.slot.ins-before::before { left: -5px; }
+.slot.ins-after::before { right: -5px; }
+.grid-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* two color bars: the slot's saved color above, the lab color below */
+.chip-pair { display: flex; flex-direction: column; gap: 4px; height: 76px; }
+.chip { flex: 1; min-height: 0; border-radius: 9px; border: 1px solid var(--line); background: var(--slot-empty); display: flex; align-items: center; padding: 0 6px; }
+.chip span { font: 500 12px/1 var(--font-mono); background: var(--surface); color: var(--ink); padding: 4px 6px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#replaceBtn { margin-left: auto; font-size: 12px; padding: 4px 9px; background: var(--surface); }
+#replaceBtn:disabled { opacity: .6; }
+#replaceBtn.primary { background: var(--accent); }
+.pins-row { display: flex; gap: 6px; align-items: stretch; }
+#pinBtn { font-size: 12px; padding: 2px 10px; flex: none; }
+.pins { flex: 1; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.pin { height: max(var(--chip-h, 26px), 18px); padding: 0; border-radius: 6px; border: 1px solid var(--line); touch-action: none; }
+.pin.empty { background: transparent; border-style: dashed; }
+.pin.drop { box-shadow: 0 0 0 2px var(--accent); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+input[type="text"], textarea {
+  font: 400 14px/1.4 var(--font-mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+}
+#hex { width: 9.5em; text-transform: uppercase; }
+#swName { font-family: var(--font-body); font-size: 15px; width: 100%; }
+#fillCount { width: 4.2em; font: 500 14px/1 var(--font-mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 6px; }
+#fillCount:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#swName:disabled { opacity: .5; }
+input[type="color"] { width: 44px; height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--bg); cursor: pointer; }
+.slider { display: grid; grid-template-columns: 1.4em minmax(0, 1fr) 3.2em; gap: 10px; align-items: center; font: 500 13px var(--font-mono); font-variant-numeric: tabular-nums; }
+/* Adjust all: one compact row of three sliders */
+.adjust { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.adjust .slider { flex: 1 1 130px; grid-template-columns: 0.8em minmax(0, 1fr) 3em; gap: 5px; font-size: 12px; }
+.adj-num { width: 100%; font: 500 12px/1 var(--font-mono); text-align: right; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 0 3px; height: 18px; -moz-appearance: textfield; appearance: textfield; }
+.adj-num::-webkit-inner-spin-button, .adj-num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.adjust input[type="range"] { height: 10px; }
+.adjust input[type="range"]::-webkit-slider-thumb { width: 16px; height: 16px; }
+.adjust input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; }
+input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 14px; border-radius: 99px; border: 1px solid var(--line); background: var(--slot-empty); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); }
+input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); }
+textarea { width: 100%; min-height: 70px; resize: vertical; }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 500; max-width: calc(100% - 32px);
+}
+.col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.picker-panel > .row:first-child { justify-content: space-between; }
+.stage { position: relative; border-radius: 12px; overflow: hidden; background: var(--bg); border: 1px solid var(--line); height: clamp(220px, 34vh, 340px); display: grid; place-items: center; }
+#imgView { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+#imgView.grabbing { cursor: grabbing; }
+.stage .empty-msg { color: var(--muted); font-size: 14px; padding: 24px; text-align: center; margin: 0; max-width: 46ch; }
+.site-foot { color: var(--muted); font-size: 12px; line-height: 1.4; text-align: center; }
+.site-foot a { color: inherit; text-underline-offset: 2px; }
+.site-foot a:hover { color: var(--ink); }
+.empty-msg .privacy { display: block; margin-top: 12px; font-size: 12px; opacity: .85; }
+.zoom-bar { position: absolute; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
+.zoom-bar button { padding: 6px 10px; border: none; }
+.zoom-bar span { font: 500 12px var(--font-mono); font-variant-numeric: tabular-nums; min-width: 4.5ch; text-align: center; color: var(--muted); }
+.loupe { position: absolute; width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--ink); pointer-events: none; transform: translate(-50%, -130%); }
+.check { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding-top: 14px; border-top: 1px solid var(--line); }
+.tools .clear-group { margin-left: auto; }
+.tool-group { display: flex; align-items: center; gap: 6px; }
+select { font: 500 13px/1 var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 6px; }
+select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { display: inline-flex; border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
+.seg label { padding: 8px 11px; font: 600 13px/1 var(--font-body); cursor: pointer; color: var(--muted); background: var(--surface); }
+.seg label:has(input:checked) { background: var(--ink); color: var(--bg); }
+.seg label:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+/* Theme switch: small, top right beside the title */
+.theme-group { gap: 6px; }
+#helpBtn { width: 26px; height: 26px; padding: 0; border-radius: 50%; font-weight: 700; font-size: 13px; margin-right: 6px; flex: none; }
+/* hint over the empty palette; clicks go through to the slots */
+.grid-wrap { position: relative; }
+.start-hint { position: absolute; inset: 0; margin: auto; width: fit-content; max-width: 86%; height: fit-content; pointer-events: none;
+  background: var(--surface); color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 13px; line-height: 1.4; text-align: center; box-shadow: 0 4px 16px rgb(0 0 0 / .12); }
+.start-hint b { color: var(--ink); font-weight: 600; }
+.start-hint[hidden] { display: none; }
+/* tips and shortcuts */
+#helpDlg { width: min(900px, calc(100% - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); padding: 16px 22px 20px; }
+#helpDlg::backdrop { background: rgb(0 0 0 / .45); }
+.help-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.help-head h2 { margin: 0; font: 600 18px var(--font-display, var(--font-body)); }
+#helpClose { width: 30px; height: 30px; padding: 0; }
+.help-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px 26px; }
+.help-grid h3 { margin: 0 0 5px; font: 600 11px var(--font-body); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.help-grid ul { margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.42; }
+.help-grid li + li { margin-top: 3px; }
+.help-grid kbd { font: 500 11px var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--bg); }
+/* Undo … Export card: their own full-width row under the title */
+.toolbar { flex-basis: 100%; }
+.icon-btn { font-size: 17px; padding-inline: 12px; }
+.theme-group .seg { border-radius: 8px; }
+.theme-group .seg label { padding: 5px 8px; font-size: 12px; }
+.slot.multi { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+.slot.selected.multi { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+.slot.locked::after {
+  content: ""; position: absolute; top: 3px; right: 3px; width: 12px; height: 12px; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 7.5V5a3.5 3.5 0 0 1 7 0v2.5' fill='none' stroke='%23000' stroke-width='3.4'/%3E%3Cpath d='M4.5 7.5V5a3.5 3.5 0 0 1 7 0v2.5' fill='none' stroke='%23fff' stroke-width='1.8'/%3E%3Crect x='2.5' y='7' width='11' height='8.5' rx='1.6' fill='%23fff' stroke='%23000' stroke-width='1.1'/%3E%3C/svg%3E") no-repeat center / contain;
+}
+.shades { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.shade { aspect-ratio: 1.6; max-width: 100%; padding: 0; border-radius: 6px; border: 1px solid var(--line); background: var(--slot-empty); }
+.shade.current { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--ink); }
+.shade:disabled { opacity: .5; cursor: default; }
+.chip-block { display: flex; flex-direction: column; gap: 6px; }
+.chip-block > .label { text-transform: none; letter-spacing: .01em; font-size: 12px; }
+.label.col-title { font-size: 13px; font-weight: 700; letter-spacing: .07em; color: var(--ink); }
+.lab-section { display: flex; flex-direction: column; gap: inherit; }
+.sec-body { display: flex; flex-direction: column; gap: inherit; }
+.sec-body[hidden] { display: none; }
+button.sec-toggle { display: flex; align-items: center; gap: 6px; padding: 0; line-height: 1; margin: 0; border: 0; background: none; color: var(--muted); text-align: left; cursor: pointer; width: 100%; }
+button.sec-toggle:hover { color: var(--ink); }
+/* a small chevron drawn with borders: points down when open, right when collapsed */
+.sec-toggle .caret { flex: none; width: 6px; height: 6px; margin: 0 3px 3px 2px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); transition: transform .15s; }
+.sec-toggle[aria-expanded="false"] .caret { transform: rotate(-45deg); margin-bottom: 0; }
+@media (prefers-reduced-motion: reduce) { .sec-toggle .caret { transition: none; } }
+.divider { border: 0; border-top: 1px solid var(--muted); opacity: .45; margin: 2px 0; width: 100%; }
+#hues .shade { aspect-ratio: auto; height: 100%; min-height: 14px; }
+#hues { grid-auto-rows: var(--chip-h, 34px); }
+#tones, #shades { grid-auto-rows: var(--chip-h, 34px); }
+#tones .shade, #shades .shade { aspect-ratio: auto; height: 100%; }
+.harmonies { display: flex; flex-direction: column; gap: 6px; }
+/* wheel beside the rows; in a narrow column the rows drop below the wheel */
+.harmony-wrap { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; align-items: center; }
+.harmony-wrap > .hwheel { flex: none; }
+.harmony-wrap > .harmonies { flex: 1 1 230px; min-width: 0; }
+.hwheel { position: relative; width: var(--wheel, 136px); aspect-ratio: 1; max-width: 100%; }
+.hring { position: absolute; inset: 0; border-radius: 50%; background: var(--slot-empty);
+  -webkit-mask: radial-gradient(closest-side, transparent 57%, #000 59%); mask: radial-gradient(closest-side, transparent 57%, #000 59%); }
+#hwheelSvg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; touch-action: none; }
+#hwheelSvg .spoke { stroke: var(--muted); stroke-width: .8; }
+#hwheelSvg .dot { stroke: var(--surface); stroke-width: 2; }
+#hwheelSvg .dot-ring { fill: none; stroke: var(--ink); stroke-width: 1; pointer-events: none; }
+#hwheelSvg .drag { cursor: grab; }
+#hwheelSvg .fixed { stroke-dasharray: 2 1.5; }
+#hwheelSvg .readout { fill: var(--ink); font: 600 11px var(--font-mono); text-anchor: middle; dominant-baseline: middle; }
+#hwheelSvg .readout-sub { fill: var(--muted); font: 500 7px var(--font-body); text-anchor: middle; dominant-baseline: middle; }
+.harmony-row { display: grid; grid-template-columns: 6.6em minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+button.hname { font: 500 13px/1.1 var(--font-body); color: var(--muted); background: none; border: 0; border-radius: 6px; padding: 3px 5px; text-align: left; margin-left: -5px; }
+button.hname:hover { color: var(--ink); }
+button.hname[aria-pressed="true"] { color: var(--ink); background: var(--slot-empty); font-weight: 700; }
+.hchips { display: flex; gap: 4px; min-width: 0; }
+.hchip { flex: 1; min-width: 0; height: 28px; padding: 0; border-radius: 6px; border: 1px solid var(--line); background: var(--slot-empty); }
+.hchip.base { box-shadow: inset 0 0 0 2px var(--surface); cursor: default; opacity: 1; }
+.hchip:disabled:not(.base) { opacity: .5; cursor: default; }
+.harmony-row button.add { padding: 6px 8px; font-size: 12px; }
+.hchip:not(.base):not(:disabled), .shade:not(:disabled) { cursor: grab; touch-action: none; }
+.drag-ghost {
+  position: fixed; z-index: 50; width: 40px; height: 40px; border-radius: 8px; pointer-events: none;
+  border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--ink); transform: translate(-50%, -50%);
+}
+body.color-dragging, body.color-dragging * { cursor: grabbing !important; user-select: none; }
+body.pv-grey .previewable { filter: grayscale(1); }
+body.pv-protan .previewable { filter: url(#cb-protan); }
+body.pv-deutan .previewable { filter: url(#cb-deutan); }
+body.pv-tritan .previewable { filter: url(#cb-tritan); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (prefers-reduced-motion: no-preference) { .slot { transition: box-shadow .12s; } }
+/* Desktop: everything on one screen */
+@media (min-width: 1200px) {
+  body { padding-block: 16px 16px; }
+  .panel.lab-panel { gap: 10px; }        /* room for the name row and the pins */
+  .wrap { max-width: 1640px; gap: 14px; }
+  /* footer shares the header's cell: it sits at the right end of the toolbar row, so it costs no height */
+  .wrap { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .wrap > header, .site-foot { grid-area: 1 / 1; }
+  .site-foot { align-self: end; justify-self: end; text-align: right; margin-bottom: 5px; }
+  header { align-items: center; }
+  h1 { font-size: 32px; }
+  .sub { margin-top: 4px; }
+  .adjust { flex-wrap: nowrap; gap: 10px; }
+  .harmony-wrap { flex-wrap: nowrap; }
+  /* toolbar row under the title: keep it slim */
+  .actions-wrap { gap: 4px; }
+  .toolbar button, .toolbar .btn { padding-block: 6px; }
+  .harmony-wrap > .harmonies { flex-basis: 0; }
+  .adjust .slider { flex: 1 1 0; min-width: 0; }
+  .bench { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+  .col { gap: 14px; }
+  .col-image { grid-column: auto; }
+  .col-image .picker-panel { flex: 1; }
+  .col-image .stage { flex: 1; height: auto; min-height: 240px; }
+  .panel { padding: 16px; gap: 12px; }
+  .chip-pair { height: 56px; }
+  :root { --chip-h: 22px; }
+  .harmonies { gap: 4px; }
+  .hchip { height: 20px; }
+  .hwheel { --wheel: 120px; }
+  .harmony-row button.add { padding-block: 3px; }
+  .shade { aspect-ratio: 2.2; }
+  textarea { min-height: 56px; }
+}
+/* Short desktop screens (laptops up to ~1080p under the browser bars): tighten further */
+@media (min-width: 1200px) and (max-height: 920px) {
+  body { padding-block: 10px 10px; }
+  .wrap, .bench, .col { gap: 10px; }
+  h1 { font-size: 26px; }
+  .sub { display: none; }
+  .panel { padding: 10px 14px; gap: 6px; }
+  .divider { margin: 0; }
+  .chip-pair { height: 48px; }
+  #replaceBtn { padding-block: 2px; }
+  .hchip { height: 18px; }
+  .hwheel { --wheel: 104px; }
+  button.hname { font-size: 12px; padding: 1px 5px; }
+  .harmony-row button.add { padding-block: 3px; }
+  :root { --chip-h: 15px; }
+  /* chip rows: label beside the chips, short labels only */
+  .chip-block { display: grid; grid-template-columns: 5.4em minmax(0, 1fr); align-items: center; gap: 6px; }
+  .harmonies { gap: 3px; }
+  .shade { aspect-ratio: 3.2; }
+  button, .btn, .seg label { padding-block: 8px; }
+  .theme-group .seg label { padding-block: 5px; }
+  .adjust { padding-top: 4px; }
+  .tools { padding-top: 8px; row-gap: 6px; }
+  /* room for the toolbar row under the title */
+  header { row-gap: 4px; }
+  h1 { font-size: 22px; }
+  .toolbar button, .toolbar .btn { padding-block: 4px; }
+  .panel { padding-block: 8px; }
+  /* room for the Clear palette row */
+  .actions-wrap { gap: 4px; }
+  #swName, #hex { padding-block: 4px; }
+  #swName { padding-block: 3px; }
+  .panel.lab-panel { gap: 4px; }
+  input[type="color"] { height: 30px; }
+  .hchip { height: 15px; }
+  .tools button, .tools select, .tools .seg label { padding-block: 4px; }
+  #adjReset { padding-block: 2px; }
+  #paletteName { font-size: 17px; }
+  .hwheel { --wheel: 92px; }
+  button.hname { padding-block: 0; }
+  .harmony-row button.add { padding-block: 1px; }
+  .hex-body button { padding-block: 4px; }
+  .tools .tool-group { height: 28px; }
+  .icon-btn { font-size: 15px; }
+  #pasteBox { height: 38px; min-height: 0; }
+  .tools button, .tools select, .tools .seg label { padding-block: 6px; }
+  #paletteName { font-size: 19px; padding-bottom: 4px; }
+  textarea { min-height: 40px; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Palette Lab</h1>
+      <p class="sub">Make and edit your own Procreate <code>.swatches</code> files on your Desktop.</p>
+    </div>
+    <div class="actions theme-group">
+      <button id="helpBtn" type="button" title="Tips and shortcuts" aria-label="Tips and shortcuts" aria-haspopup="dialog">?</button>
+      <span class="label">Theme</span>
+      <div class="seg" role="radiogroup" aria-label="Light or dark interface">
+        <label><input type="radio" name="theme" value="dark" checked>Dark</label>
+        <label title="Mid-gray: judge colors without a bright or black surround"><input type="radio" name="theme" value="gray">Gray</label>
+        <label><input type="radio" name="theme" value="light">Light</label>
+      </div>
+    </div>
+    <div class="actions-wrap toolbar">
+      <div class="actions">
+        <button id="undoBtn" type="button" class="icon-btn" disabled title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+        <button id="redoBtn" type="button" class="icon-btn" disabled title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
+        <label class="btn" for="fileInput">Load from file</label>
+        <input type="file" id="fileInput" accept=".swatches,.zip" class="sr">
+        <button id="saveBtn" type="button" class="primary">Export .swatches</button>
+        <button id="cardBtn" type="button" title="Save a PNG picture of the palette: name, swatches and hex codes">Export card</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="bench">
+    <div class="col">
+    <section class="panel" aria-label="Palette">
+      <div class="name-row">
+        <div class="row" style="justify-content:space-between">
+          <span class="label col-title">Palette Editor</span>
+          <div class="presets" role="group" aria-label="Preset palettes">
+            <button type="button" class="example-tag" data-preset="grays" title="10 neutral, 10 cool and 10 warm grays, light to dark (Undo brings yours back)">Grays</button>
+            <button type="button" class="example-tag" data-preset="basic" title="6 hues in 5 shades each, light to dark (Undo brings yours back)">Basic</button>
+            <button type="button" class="example-tag" data-preset="random" title="30 random colors, new ones each click (Undo brings yours back)">Random</button>
+          </div>
+        </div>
+        <input id="paletteName" type="text" maxlength="60" autocomplete="off" placeholder="Palette name (optional)" aria-label="Palette name" title="Left blank, files and cards are named Untitled">
+      </div>
+      <div class="grid-wrap">
+        <div id="grid" class="grid previewable" role="listbox" aria-multiselectable="true" aria-label="Swatches, 30 slots"></div>
+        <p id="startHint" class="start-hint">Empty palette. Start with a preset (<b>Grays</b>, <b>Basic</b>, <b>Random</b>), <b>Load from file</b>, or drop in an image and press <b>Fill palette from image</b>.</p>
+      </div>
+      <div class="grid-meta">
+        <span id="count">0 / 30 colors</span>
+      </div>
+      <div class="adjust" role="group" aria-label="Adjust all colors" title="Shift every unlocked color at once. Sliders go back to 0 after any other change; Undo reverses an adjustment.">
+        <span class="label">Adjust</span>
+        <button id="adjReset" type="button" class="example-tag" disabled title="Put all three sliders back to 0 (your colors from before adjusting)">Reset</button>
+        <div class="slider" title="Hue shift in degrees, −180 to 180 (type a number or drag)"><span>H</span><input id="adjH" type="range" min="-180" max="180" step="1" value="0" aria-label="Shift hue of all colors"><input id="adjHNum" class="adj-num" type="number" min="-180" max="180" step="1" value="0" aria-label="Hue shift in degrees"></div>
+        <div class="slider" title="Saturation, −100 to 100 (type a number or drag)"><span>S</span><input id="adjS" type="range" min="-100" max="100" step="1" value="0" aria-label="Saturation of all colors"><input id="adjSNum" class="adj-num" type="number" min="-100" max="100" step="1" value="0" aria-label="Saturation change"></div>
+        <div class="slider" title="Lightness, −100 (black) to 100 (white) (type a number or drag)"><span>L</span><input id="adjL" type="range" min="-100" max="100" step="1" value="0" aria-label="Lightness of all colors"><input id="adjLNum" class="adj-num" type="number" min="-100" max="100" step="1" value="0" aria-label="Lightness change"></div>
+      </div>
+      <div class="tools" role="toolbar" aria-label="Palette tools" title="Tools act on the whole palette, or only the selected slots when several are selected. Locked colors are never changed.">
+        <div class="tool-group">
+          <select id="sortBy" aria-label="Sort by">
+            <option value="hue">Hue</option>
+            <option value="brightness">Brightness</option>
+            <option value="saturation">Saturation</option>
+          </select>
+          <button id="sortBtn" type="button">Sort palette</button>
+        </div>
+        <button id="lockBtn" type="button">Lock</button>
+        <button id="blendBtn" type="button" disabled title="Select two or more slots first">Blend selected</button>
+        <div class="tool-group">
+          <span class="label">Drag</span>
+          <div class="seg" role="radiogroup" aria-label="When dragging a swatch">
+            <label title="Dropping on a swatch swaps the two"><input type="radio" name="dragMode" id="dragSwap" value="swap" checked>Swap</label>
+            <label title="A bar shows where the swatch will go; the rest shift along"><input type="radio" name="dragMode" id="dragInsert" value="insert">Insert</label>
+          </div>
+        </div>
+        <div class="tool-group">
+          <label class="label" for="previewMode" title="See the palette as people with color blindness would">Vision</label>
+          <select id="previewMode">
+            <option value="">Normal</option>
+            <option value="grey">Grayscale</option>
+            <option value="protan" title="Protanopia">Red-blind</option>
+            <option value="deutan" title="Deuteranopia">Green-blind</option>
+            <option value="tritan" title="Tritanopia">Blue-blind</option>
+          </select>
+        </div>
+        <div class="tool-group clear-group">
+          <button id="newBtn" type="button" class="danger" disabled>Clear palette</button>
+          <label class="check"><input type="checkbox" id="clearConfirm"> Confirm</label>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="panel hex-panel" aria-label="Hex codes">
+      <div class="hex-body">
+        <label class="label col-title" for="pasteBox">Import/export palette hex codes</label>
+        <textarea id="pasteBox" spellcheck="false" placeholder="#F2C14E #F78154 #4D9078 …" title="Paste hex codes here, or export the palette to this box"></textarea>
+        <div class="row">
+          <button id="pasteBtn" type="button">Import from list</button>
+          <button id="copyBtn" type="button">Export to list</button>
+        </div>      </div>
+    </section>
+    </div>
+
+    <section class="panel lab-panel" aria-label="Selected color">
+      <span class="label col-title">Color lab</span>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <input id="swName" type="text" maxlength="60" autocomplete="off" placeholder="Color name (optional)" aria-label="Color name" title="Leave blank and Procreate suggests a name">
+      </div>
+      <div class="chip-pair">
+        <div id="chipSaved" class="chip previewable" title="The color saved in this palette slot"><span id="chipSavedText">Empty</span></div>
+        <div id="chip" class="chip previewable" title="The color you're changing here; Replace swatch saves it"><span id="chipText">Empty</span><button id="replaceBtn" type="button" disabled>Replace swatch</button></div>
+      </div>
+      <div class="pins-row">
+        <button id="pinBtn" type="button" title="Hold the color above aside in a pin">Pin</button>
+        <div id="pins" class="pins previewable" aria-label="Pinned colors"></div>
+      </div>
+      <hr class="divider">
+      <div class="lab-section" data-sec="finetune">
+        <button type="button" class="sec-toggle label" aria-expanded="true" aria-controls="sec-finetune" title="Color picker, hex code and H/S/B sliders."><span class="caret" aria-hidden="true"></span>Fine-tune</button>
+        <div class="sec-body" id="sec-finetune">
+        <div class="row">
+          <input id="picker" type="color" aria-label="Color picker">
+          <input id="hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Hex code">
+          <button id="clearBtn" type="button" class="danger">Clear slot</button>
+        </div>
+        <div class="slider" title="Hue in degrees, 0 to 360 (type a number or drag)"><span>H</span><input id="h" type="range" min="0" max="360" step="1" aria-label="Hue"><input id="hNum" class="adj-num" type="number" min="0" max="360" step="1" aria-label="Hue in degrees"></div>
+        <div class="slider" title="Saturation in %, 0 to 100 (type a number or drag)"><span>S</span><input id="s" type="range" min="0" max="100" step="1" aria-label="Saturation"><input id="sNum" class="adj-num" type="number" min="0" max="100" step="1" aria-label="Saturation in percent"></div>
+        <div class="slider" title="Brightness in %, 0 to 100 (type a number or drag)"><span>B</span><input id="b" type="range" min="0" max="100" step="1" aria-label="Brightness"><input id="bNum" class="adj-num" type="number" min="0" max="100" step="1" aria-label="Brightness in percent"></div>
+        </div>
+      </div>
+      <hr class="divider">
+      <div class="lab-section" data-sec="variations">
+        <button type="button" class="sec-toggle label" aria-expanded="true" aria-controls="sec-variations" title="Steps of hue, tone and shade from this color."><span class="caret" aria-hidden="true"></span>Variations</button>
+        <div class="sec-body" id="sec-variations">
+        <div class="chip-block">
+          <span class="label" title="Hue in 30° steps. Click to use, or drag onto a slot.">Degrees</span>
+          <div id="hues" class="shades previewable"></div>
+        </div>
+        <div class="chip-block">
+          <span class="label" title="Grey to full color.">Tones</span>
+          <div id="tones" class="shades previewable"></div>
+        </div>
+        <div class="chip-block">
+          <span class="label" title="Darker to lighter.">Shades</span>
+          <div id="shades" class="shades previewable"></div>
+        </div>
+        </div>
+      </div>
+      <hr class="divider">
+      <div class="lab-section" data-sec="harmonies">
+        <button type="button" class="sec-toggle label" aria-expanded="true" aria-controls="sec-harmonies" title="Drag the wheel dots to change angles. Click a color to add it."><span class="caret" aria-hidden="true"></span>Harmonies</button>
+        <div class="sec-body" id="sec-harmonies">
+          <div class="harmony-wrap">
+            <div class="hwheel previewable" id="hwheel">
+              <div class="hring" id="hring"></div>
+              <svg id="hwheelSvg" viewBox="0 0 100 100" role="img" aria-label="Harmony wheel: drag the dots to change the angle"></svg>
+            </div>
+            <div id="harmonies" class="harmonies previewable"></div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <div class="col col-image">
+    <section class="panel picker-panel" aria-label="Pick colors from an image">
+      <div class="row">
+        <span class="label col-title">Color picker</span>
+        <div class="row">
+          <label class="btn" for="imgInput">Choose image</label>
+          <button id="clearImgBtn" type="button" hidden>Clear image</button>
+          <input type="file" id="imgInput" accept="image/*" class="sr">
+        </div>
+      </div>
+      <div class="stage" id="stage">
+        <canvas id="imgView" hidden></canvas>
+        <div id="loupe" class="loupe" hidden></div>
+        <p class="empty-msg" id="imgEmpty">Drop, paste or choose an image.<br>Click to pick · drag to move · scroll to zoom<span class="privacy">Your images and palettes stay on your computer. No AI runs in this tool.</span></p>
+        <div class="zoom-bar" id="zoomBar" hidden>
+          <button id="zoomOut" type="button" aria-label="Zoom out">−</button>
+          <span id="zoomLevel">100%</span>
+          <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
+          <button id="zoomFit" type="button">Fit</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="tool-group">
+          <select id="mood" aria-label="Mood for filling from the image">
+            <option value="balanced">Balanced</option>
+            <option value="colorful">Colorful</option>
+            <option value="bright">Bright</option>
+            <option value="muted">Muted</option>
+            <option value="deep">Deep</option>
+            <option value="dark">Dark</option>
+          </select>
+          <button id="fillImgBtn" type="button" disabled>Fill palette from image</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="tool-group">
+          <span class="label">Colors</span>
+          <div class="seg" role="radiogroup" aria-label="How many colors to make">
+            <label title="Row 1"><input type="radio" name="fillPreset" value="10">10</label>
+            <label title="Rows 1–2"><input type="radio" name="fillPreset" value="20">20</label>
+            <label title="All 3 rows"><input type="radio" name="fillPreset" value="30" checked>30</label>
+          </div>
+          <input id="fillCount" type="number" min="1" max="30" value="30" aria-label="Number of colors, 1 to 30">
+        </div>
+      </div>
+    </section>
+    </div>
+  </div>
+
+  <footer class="site-foot">
+    A free tool by <a href="https://camchromatic.com">Cam Garcia</a>. Your files stay on your computer.
+    Like what I do? <a href="https://ko-fi.com/camchromatic" target="_blank" rel="noopener">Support me on Ko-Fi</a>.
+    <a href="https://github.com/camchromatic/palette-lab" target="_blank" rel="noopener">View the code</a>.
+  </footer>
+</div>
+<div id="toast" class="toast" hidden></div>
+<dialog id="helpDlg" aria-labelledby="helpTitle">
+  <div class="help-head">
+    <h2 id="helpTitle">Tips and shortcuts</h2>
+    <button id="helpClose" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="help-grid">
+    <section>
+      <h3>Palette</h3>
+      <ul>
+        <li>Click a swatch to select it. <b>Shift-click</b> selects a range, <b>Ctrl-click</b> (⌘ on Mac) adds or removes one.</li>
+        <li><b>Drag</b> a swatch to move it. Swap or Insert is set under the palette.</li>
+        <li><b>Right-click</b> a swatch, or press <kbd>Delete</kbd>, to clear it.</li>
+        <li><kbd>Arrow keys</kbd> move between swatches.</li>
+        <li><b>Lock</b> keeps colors safe from presets, sorting, Adjust, fills and opening a file.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>Color lab</h3>
+      <ul>
+        <li>The top bar is the saved swatch, the bottom bar is the color you're trying. Nothing is saved until <b>Replace swatch</b> (or <kbd>Enter</kbd> in the hex or number boxes).</li>
+        <li>Click a Degrees, Tones or Shades chip to try it. <b>Drag</b> any chip onto a swatch to save it there.</li>
+        <li>Harmonies: click a color to add it to the first empty slot. Drag the wheel's dots to change the angle.</li>
+        <li>Click a section title to fold it away.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>Pins</h3>
+      <ul>
+        <li><b>Pin</b> holds the lab color aside (or click an empty pin).</li>
+        <li>Click a pin to load it into the lab. <b>Drag</b> pins to swap them, or onto a swatch.</li>
+        <li>Drag a swatch into a pin. <b>Right-click</b> a pin to remove it.</li>
+        <li>Pins stay in this browser between visits.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>Image</h3>
+      <ul>
+        <li>Drop, paste (<kbd>Ctrl+V</kbd>) or choose an image.</li>
+        <li>Click it to pick a color into the lab. Drag to move, scroll or pinch to zoom.</li>
+        <li><b>Fill palette from image</b> makes a whole palette: pick a mood and how many colors.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>Files and keys</h3>
+      <ul>
+        <li>Drop a <code>.swatches</code> file anywhere on the page to open it.</li>
+        <li><kbd>Ctrl+Z</kbd> undo, <kbd>Ctrl+Y</kbd> or <kbd>Ctrl+Shift+Z</kbd> redo.</li>
+        <li><b>Export card</b> saves a picture of the palette with its hex codes.</li>
+      </ul>
+    </section>
+  </div>
+</dialog>
+<!-- Color-vision simulations (Machado et al. 2009, full severity) used by the Preview menu -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="cb-protan"><feColorMatrix type="matrix" values="0.152286 1.052583 -0.204868 0 0  0.114503 0.786281 0.099216 0 0  -0.003882 -0.048116 1.051998 0 0  0 0 0 1 0"/></filter>
+  <filter id="cb-deutan"><feColorMatrix type="matrix" values="0.367322 0.860646 -0.227968 0 0  0.280085 0.672501 0.047413 0 0  -0.011820 0.042940 0.968881 0 0  0 0 0 1 0"/></filter>
+  <filter id="cb-tritan"><feColorMatrix type="matrix" values="1.255528 -0.076749 -0.178779 0 0  -0.078411 0.930809 0.147602 0 0  0.004733 0.691367 0.303900 0 0  0 0 0 1 0"/></filter>
+</svg>
+
+<script>
+const SLOTS = 30;
+const $ = id => document.getElementById(id);
+
+// ---- color maths (Procreate stores HSB, each 0–1) ----
+function hsbToRgb(h, s, v) {
+  const i = Math.floor(h * 6), f = h * 6 - i;
+  const p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  const [r, g, b] = [[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][((i % 6) + 6) % 6];
+  return [r, g, b].map(x => Math.round(x * 255));
+}
+function rgbToHsb(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6; if (h < 0) h += 1;
+  }
+  return { hue: h, saturation: max ? d / max : 0, brightness: max };
+}
+const toHex = sw => '#' + hsbToRgb(sw.hue, sw.saturation, sw.brightness).map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+function parseHex(str) {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(str.trim());
+  if (!m) return null;
+  let h = m[1]; if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+}
+const fromHex = hex => { const rgb = parseHex(hex); return rgb ? { ...rgbToHsb(...rgb), alpha: 1, colorSpace: 0 } : null; };
+const fromRgb = rgb => ({ ...rgbToHsb(...rgb), alpha: 1, colorSpace: 0 });
+const swRgb = sw => hsbToRgb(sw.hue, sw.saturation, sw.brightness);
+
+// OKLab: a color space where equal steps look equal, used for blends, shades and image fills
+function rgbToOklab([r, g, b]) {
+  const lin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  r = lin(r); g = lin(g); b = lin(b);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+          1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+          0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
+}
+function oklabToRgb([L, A, B]) {
+  const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
+  const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
+  const s = (L - 0.0894841775 * A - 1.2914855480 * B) ** 3;
+  const out = c => { c = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(Math.max(c, 0), 1 / 2.4) - 0.055; return Math.round(Math.min(1, Math.max(0, c)) * 255); };
+  return [out(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+          out(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+          out(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)];
+}
+const labDist2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+
+// ---- state ----
+let fileWrapper = null;   // the full parsed Swatches.json (kept so unknown fields survive a save)
+let paletteIndex = 0;
+let paletteExtra = {};    // other keys on the palette object we don't edit
+let name = '';
+let swatches = new Array(SLOTS).fill(null);
+let selected = 0;
+let draft = null, draftOf = null, draftSlot = -1;   // the Color lab's unsaved color (see setDraft)
+let isExample = true;
+// "Adjust all" sliders: the palette before adjusting, and each adjusted swatch -> [its original, its color then]
+let adjBase = null, adjMap = new Map();
+// Key used for per-swatch names. Unconfirmed guess for Procreate; replaced by
+// whatever text key an opened file already uses for its swatches.
+const KNOWN_KEYS = ['hue', 'saturation', 'brightness', 'alpha', 'colorSpace'];
+let nameKey = 'name';
+const swName = sw => (sw && typeof sw[nameKey] === 'string') ? sw[nameKey] : '';
+// Multi-select: `selected` is the slot shown in the editor; `multi` holds extra
+// selected slots (empty when only one slot is selected).
+let multi = new Set(), anchor = 0;
+const selection = () => multi.size > 1 ? [...multi].sort((a, b) => a - b) : [selected];
+// Locks live on the swatch (as _locked) so they travel with it and undo; stripped on export.
+const isLocked = i => !!swatches[i]?._locked;
+
+// The page opens with an empty palette (presets fill it on request)
+function loadBlank() {
+  fileWrapper = null; paletteIndex = 0; paletteExtra = {};
+  name = '';   // blank: the box shows "Palette name (optional)"; saves still say Untitled
+  swatches = new Array(SLOTS).fill(null);
+  selected = 0; isExample = true;
+  render();
+}
+
+// ---- rendering ----
+const grid = $('grid');
+for (let i = 0; i < SLOTS; i++) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'slot'; b.dataset.i = i; b.draggable = true;
+  b.setAttribute('role', 'option');
+  b.addEventListener('click', e => clickSlot(i, e));
+  // right-click deletes this swatch (undo brings it back)
+  b.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    if (!swatches[i]) return;
+    if (isLocked(i)) { toast(`Slot ${i + 1} is locked. Unlock it to delete it.`); return; }
+    swatches[i] = null; isExample = false; render();
+  });
+  b.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/x-slot', String(i)); e.dataTransfer.effectAllowed = 'move';
+    b.classList.add('dragging');
+  });
+  b.addEventListener('dragend', () => { b.classList.remove('dragging'); clearDropMarks(); });
+  b.addEventListener('dragover', e => {
+    if (!e.dataTransfer.types.includes('text/x-slot')) return;
+    e.preventDefault();
+    clearDropMarks();
+    if ($('dragInsert').checked) {
+      // left half of a swatch = insert before it, right half = after it
+      const r = b.getBoundingClientRect();
+      b.classList.add(e.clientX < r.left + r.width / 2 ? 'ins-before' : 'ins-after');
+    } else b.classList.add('drop');
+  });
+  b.addEventListener('dragleave', () => b.classList.remove('drop', 'ins-before', 'ins-after'));
+  b.addEventListener('drop', e => {
+    const after = b.classList.contains('ins-after');
+    clearDropMarks();
+    const from = Number(e.dataTransfer.getData('text/x-slot'));
+    if (Number.isNaN(from)) return;
+    e.preventDefault(); e.stopPropagation();
+    if ($('dragInsert').checked) {
+      // the gap the bar showed, then allow for the dragged swatch leaving its old place
+      const gap = i + (after ? 1 : 0);
+      const to = gap > from ? gap - 1 : gap;
+      if (to !== from) moveSlot(from, to, true);
+    } else if (from !== i) moveSlot(from, i, false);
+  });
+  grid.appendChild(b);
+}
+
+function clearDropMarks() {
+  grid.querySelectorAll('.drop, .ins-before, .ins-after').forEach(el => el.classList.remove('drop', 'ins-before', 'ins-after'));
+}
+
+function clickSlot(i, e) {
+  if (e.shiftKey) {
+    multi = new Set();
+    for (let k = Math.min(anchor, i); k <= Math.max(anchor, i); k++) multi.add(k);
+  } else if (e.ctrlKey || e.metaKey) {
+    if (!multi.size) multi.add(selected);
+    if (multi.has(i) && multi.size > 1) multi.delete(i); else multi.add(i);
+    anchor = i;
+  } else {
+    multi = new Set(); anchor = i;
+  }
+  selected = multi.size && !multi.has(i) ? [...multi][0] : i;
+  if (multi.size < 2) multi = new Set();
+  render();
+}
+
+function render() {
+  $('paletteName').value = name;
+  [...grid.children].forEach((el, i) => {
+    const sw = swatches[i];
+    el.classList.toggle('empty', !sw);
+    el.classList.toggle('selected', i === selected);
+    el.classList.toggle('multi', multi.has(i));
+    el.classList.toggle('locked', isLocked(i));
+    el.setAttribute('aria-selected', i === selected || multi.has(i));
+    el.style.background = sw ? toHex(sw) : '';
+    el.setAttribute('aria-label', `Slot ${i + 1}: ${sw ? [swName(sw), toHex(sw)].filter(Boolean).join(', ') : 'empty'}`);
+    el.title = sw ? [swName(sw), toHex(sw)].filter(Boolean).join(' · ') : '';
+  });
+  $('count').textContent = `${swatches.filter(Boolean).length} / ${SLOTS} colors`;
+  $('startHint').hidden = swatches.some(Boolean);
+  const many = multi.size > 1, sel = selection();
+  $('sortBtn').textContent = many ? `Sort ${sel.length} selected` : 'Sort palette';
+  $('blendBtn').disabled = !many;
+  const filled = sel.filter(i => swatches[i]);
+  $('lockBtn').textContent = filled.length && filled.every(isLocked) ? (many ? 'Unlock selected' : 'Unlock') : (many ? 'Lock selected' : 'Lock');
+  $('lockBtn').disabled = !filled.length;
+  if (adjBase) followAdjust();
+  scheduleCommit();
+  renderEditor();
+}
+
+// Seven steps from darker to lighter around a color, keeping its hue (in OKLab).
+function shadesOf(sw) {
+  const [L, A, B] = rgbToOklab(swRgb(sw));
+  return [-3, -2, -1, 0, 1, 2, 3].map(k => {
+    if (!k) return swRgb(sw);
+    const t = Math.abs(k) / 4;
+    // darker: lower lightness; lighter: raise lightness and ease off the color so it stays printable
+    return k < 0 ? oklabToRgb([L * (1 - t * 0.85), A * (1 - t * 0.3), B * (1 - t * 0.3)])
+                 : oklabToRgb([L + (1 - L) * t * 0.9, A * (1 - t * 0.7), B * (1 - t * 0.7)]);
+  });
+}
+// Drag a color chip (shade or harmony) onto a palette slot. Uses pointer events so it
+// works with mouse, pen and touch. A press without moving still counts as a click.
+function makeColorDraggable(btn, getRgb, fromPin = -1) {
+  let start = null, ghost = null, over = null, justDragged = false;
+  const setOver = el => { if (over === el) return; over?.classList.remove('drop'); over = el; over?.classList.add('drop'); };
+  const finish = () => { ghost?.remove(); ghost = null; setOver(null); start = null; document.body.classList.remove('color-dragging'); };
+  btn.addEventListener('pointerdown', e => {
+    if (btn.disabled || btn.classList.contains('empty') || e.button > 0) return;
+    start = { x: e.clientX, y: e.clientY };
+    btn.setPointerCapture(e.pointerId);
+  });
+  btn.addEventListener('pointermove', e => {
+    if (!start) return;
+    if (!ghost) {
+      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) < 5) return;
+      ghost = document.createElement('div'); ghost.className = 'drag-ghost';
+      ghost.style.background = `rgb(${getRgb().join(',')})`;
+      document.body.appendChild(ghost); document.body.classList.add('color-dragging');
+    }
+    ghost.style.left = e.clientX + 'px'; ghost.style.top = e.clientY + 'px';
+    setOver(document.elementFromPoint(e.clientX, e.clientY)?.closest('.slot, .pin') || null);
+  });
+  btn.addEventListener('pointerup', () => {
+    if (ghost) {
+      justDragged = true;
+      if (over?.classList.contains('pin')) dropOnPin(Number(over.dataset.p), getRgb(), fromPin);
+      else if (over) dropColor(Number(over.dataset.i), getRgb());
+    }
+    finish();
+  });
+  btn.addEventListener('pointercancel', finish);
+  // swallow the click that follows a drag, so a drop isn't also treated as a click
+  btn.addEventListener('click', e => { if (justDragged) { justDragged = false; e.stopImmediatePropagation(); } });
+}
+function dropColor(i, rgb) {
+  if (isLocked(i)) { toast(`Slot ${i + 1} is locked. Unlock it to change it.`); return; }
+  // the selection stays put, so the shades and harmonies don't jump to the dropped color
+  swatches[i] = fromRgb(rgb);
+  isExample = false; render();
+}
+
+// ---- pinned colors: 10 colors held aside in the Color lab (remembered in this browser, not in Undo) ----
+const PINS = 10, pinBox = $('pins');
+let pins = new Array(PINS).fill(null);
+try {
+  const saved = JSON.parse(localStorage.getItem('pb-pins') || '[]');
+  if (Array.isArray(saved)) saved.slice(0, PINS).forEach((p, k) => {
+    if (p && [p.hue, p.saturation, p.brightness].every(v => Number.isFinite(v) && v >= 0 && v <= 1)) pins[k] = { hue: p.hue, saturation: p.saturation, brightness: p.brightness };
+  });
+} catch {}
+const pinOf = sw => ({ hue: sw.hue, saturation: sw.saturation, brightness: sw.brightness });
+function setPins(next) {
+  pins = next;
+  try { localStorage.setItem('pb-pins', JSON.stringify(pins)); } catch {}
+  renderPins();
+}
+function renderPins() {
+  [...pinBox.children].forEach((b, k) => {
+    const p = pins[k], hx = p ? toHex(p) : '';
+    b.classList.toggle('empty', !p);
+    b.style.background = hx;
+    b.title = p ? `${hx}: click to load into the lab · drag to move · right-click to remove` : 'Empty pin: click to pin the lab color here';
+    b.setAttribute('aria-label', p ? `Pin ${k + 1}: ${hx}` : `Pin ${k + 1}: empty`);
+  });
+}
+function dropOnPin(p, rgb, from) {
+  const next = pins.slice();
+  if (from >= 0) { if (from === p) return; [next[from], next[p]] = [next[p], next[from]]; }   // pin onto pin: swap
+  else next[p] = pinOf(rgbToHsb(...rgb));
+  setPins(next);
+}
+for (let k = 0; k < PINS; k++) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'pin empty'; b.dataset.p = k;
+  makeColorDraggable(b, () => hsbToRgb(pins[k].hue, pins[k].saturation, pins[k].brightness), k);
+  b.addEventListener('click', () => {
+    if (pins[k]) { setDraft(pins[k]); return; }
+    const sw = labColor();
+    if (sw) { const next = pins.slice(); next[k] = pinOf(sw); setPins(next); }
+  });
+  b.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    if (pins[k]) { const next = pins.slice(); next[k] = null; setPins(next); }
+  });
+  // palette swatches can be dragged in too
+  b.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('text/x-slot')) { e.preventDefault(); b.classList.add('drop'); } });
+  b.addEventListener('dragleave', () => b.classList.remove('drop'));
+  b.addEventListener('drop', e => {
+    b.classList.remove('drop');
+    const sw = swatches[Number(e.dataTransfer.getData('text/x-slot'))];
+    if (!sw) return;
+    e.preventDefault();
+    const next = pins.slice(); next[k] = pinOf(sw); setPins(next);
+  });
+  pinBox.appendChild(b);
+}
+renderPins();
+$('pinBtn').addEventListener('click', () => {
+  const sw = labColor(); if (!sw) return;
+  const k = pins.findIndex(p => !p);
+  if (k < 0) { toast('All 10 pins are full. Right-click a pin to remove it, or drag a color onto one to swap it.'); return; }
+  const next = pins.slice(); next[k] = pinOf(sw); setPins(next);
+});
+
+// Seven steps from neutral grey to the full color, at the same lightness (in OKLab).
+function tonesOf(sw) {
+  const [L, A, B] = rgbToOklab(swRgb(sw));
+  return [0, 1, 2, 3, 4, 5, 6].map(k => k === 6 ? swRgb(sw) : oklabToRgb([L, A * k / 6, B * k / 6]));
+}
+// The selected color's hue turned in 30° steps: itself first, then 11 more around the wheel.
+const huesOf = sw => [...Array(12).keys()].map(k => k ? hsbToRgb((sw.hue + k / 12) % 1, sw.saturation, sw.brightness) : swRgb(sw));
+// a row of clickable, draggable chips; `current` marks the selected color's own chip
+function buildChipRow(box, current, count = 7) {
+  box.style.gridTemplateColumns = `repeat(${count}, minmax(0, 1fr))`;
+  for (let k = 0; k < count; k++) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'shade' + (k === current ? ' current' : '');
+    makeColorDraggable(b, () => b.dataset.rgb.split(',').map(Number));
+    b.addEventListener('click', () => { if (b.dataset.rgb) setDraft(rgbToHsb(...b.dataset.rgb.split(',').map(Number))); });
+    box.appendChild(b);
+  }
+}
+function fillChipRow(box, sw, cols, current) {
+  [...box.children].forEach((b, k) => {
+    b.disabled = !sw;
+    b.dataset.rgb = sw ? cols[k].join(',') : '';
+    b.style.background = sw ? `rgb(${cols[k].join(',')})` : '';
+    const hx = sw ? '#' + cols[k].map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase() : '';
+    b.title = sw ? (k === current ? `Current color ${hx}` : `Use ${hx}`) : '';
+    b.setAttribute('aria-label', b.title || 'No color selected');
+  });
+}
+const shadeBox = $('shades'), toneBox = $('tones'), hueBox = $('hues');
+buildChipRow(hueBox, 0, 12);
+buildChipRow(toneBox, 6);
+buildChipRow(shadeBox, 3);
+
+// Color-wheel harmonies: hue turns (in degrees) from the selected color, same saturation and brightness.
+// Split, analogous and square/rectangle have an adjustable angle, set by dragging dots on the wheel.
+const harmonyAngles = { split: 30, analog: 30, square: 90 };
+try { Object.assign(harmonyAngles, JSON.parse(localStorage.getItem('pb-harmony-angles') || '{}')); } catch {}
+const HARMONIES = [
+  { key: 'comp',   label: 'Complement',     full: 'Complementary',                 turns: () => [180] },
+  { key: 'split',  label: 'Split comp.',    full: 'Split complementary',           turns: () => [180 - harmonyAngles.split, 180 + harmonyAngles.split] },
+  { key: 'analog', label: 'Analogous',      full: 'Analogous',                     turns: () => [-harmonyAngles.analog, harmonyAngles.analog] },
+  { key: 'triad',  label: 'Triadic',        full: 'Triadic',                       turns: () => [120, 240] },
+  { key: 'square', label: 'Square / rect.', full: 'Square / rectangle (tetradic)', turns: () => [harmonyAngles.square, 180, 180 + harmonyAngles.square] }
+];
+let activeHarmony = 'analog';
+const harmonyColors = (sw, turns) => turns.map(t => ({ hue: ((sw.hue + t / 360) % 1 + 1) % 1, saturation: sw.saturation, brightness: sw.brightness }));
+// put colors into the first empty, unlocked slots; returns the slot numbers used.
+// An empty selected slot holding an unsaved lab color is skipped, so that color isn't lost.
+function addToEmpty(cols) {
+  const used = [];
+  for (const c of cols) {
+    const i = swatches.findIndex((s, k) => !s && !used.includes(k) && !(draft && k === selected));
+    if (i < 0) break;
+    swatches[i] = { ...c, alpha: 1, colorSpace: 0 };
+    used.push(i);
+  }
+  isExample = false; render();
+  if (!used.length) toast('The palette is full. Clear a slot to add more.');
+  else toast(`Added to slot${used.length > 1 ? 's' : ''} ${used.map(i => i + 1).join(', ')}` + (used.length < cols.length ? `. ${cols.length - used.length} didn't fit.` : '.'));
+}
+const harmonyBox = $('harmonies');
+HARMONIES.forEach(h => {
+  const row = document.createElement('div'); row.className = 'harmony-row';
+  const nm = document.createElement('button'); nm.type = 'button'; nm.className = 'hname'; nm.textContent = h.label;
+  nm.title = `${h.full}: show on the wheel`;
+  nm.setAttribute('aria-pressed', h.key === activeHarmony);
+  nm.addEventListener('click', () => { activeHarmony = h.key; renderEditor(); });
+  const chips = document.createElement('div'); chips.className = 'hchips';
+  for (let k = 0; k <= h.turns().length; k++) {
+    const b = document.createElement('button'); b.type = 'button';
+    b.className = 'hchip' + (k ? '' : ' base');
+    if (k) makeColorDraggable(b, () => parseHex(b.dataset.hex));
+    if (k) b.addEventListener('click', () => { const sw = labColor(); if (sw) addToEmpty([harmonyColors(sw, [h.turns()[k - 1]])[0]]); });
+    else b.disabled = true;
+    chips.appendChild(b);
+  }
+  const add = document.createElement('button'); add.type = 'button'; add.className = 'add'; add.textContent = 'Add all';
+  add.setAttribute('aria-label', `Add all ${h.full.toLowerCase()} colors`);
+  add.addEventListener('click', () => { const sw = labColor(); if (sw) addToEmpty(harmonyColors(sw, h.turns())); });
+  row.append(nm, chips, add);
+  harmonyBox.appendChild(row);
+});
+
+// ---- harmony wheel ----
+// Hue 0 at the top, going clockwise (the same way CSS conic gradients run).
+const wheelSvg = $('hwheelSvg'), SVGNS = 'http://www.w3.org/2000/svg';
+const DOT_R = 40;   // radius of the dot track, in the 100x100 viewBox
+const polar = deg => [50 + DOT_R * Math.sin(deg * Math.PI / 180), 50 - DOT_R * Math.cos(deg * Math.PI / 180)];
+const svgEl = (tag, attrs) => { const el = document.createElementNS(SVGNS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); return el; };
+function renderWheel(sw) {
+  const view = sw || { hue: 0, saturation: 0, brightness: 0.6 };
+  const stops = [...Array(13).keys()].map(k => `rgb(${hsbToRgb((k % 12) / 12, Math.max(view.saturation, .35), Math.max(view.brightness, .45)).join(',')})`);
+  $('hring').style.background = sw ? `conic-gradient(${stops.join(',')})` : '';
+  wheelSvg.replaceChildren();
+  if (!sw) return;
+  const h = HARMONIES.find(x => x.key === activeHarmony), turns = h.turns(), base = sw.hue * 360;
+  const adjustable = h.key === 'split' || h.key === 'analog' || h.key === 'square';
+  const pts = [{ k: -1, deg: base, col: sw }, ...turns.map((t, k) => ({ k, deg: base + t, col: harmonyColors(sw, [t])[0] }))];
+  pts.forEach(pt => { const [x, y] = polar(pt.deg); wheelSvg.append(svgEl('line', { class: 'spoke', x1: 50, y1: 50, x2: x, y2: y })); });
+  pts.forEach(pt => {
+    const [x, y] = polar(pt.deg);
+    const fixed = pt.k >= 0 && (!adjustable || (h.key === 'square' && pt.k === 1));
+    const c = svgEl('circle', { cx: x, cy: y, r: pt.k < 0 ? 7.5 : 6, fill: toHex(pt.col), class: 'dot' + (fixed ? ' fixed' : ' drag'), 'data-k': pt.k });
+    const title = svgEl('title', {});
+    title.textContent = pt.k < 0 ? 'Your color: drag to turn its hue' : fixed ? 'Fixed by this harmony' : 'Drag to change the angle';
+    c.append(title);
+    wheelSvg.append(c);
+    if (pt.k < 0) wheelSvg.append(svgEl('circle', { cx: x, cy: y, r: 9.5, class: 'dot-ring' }));
+  });
+  const txt = h.key === 'split' ? `±${harmonyAngles.split}°` : h.key === 'analog' ? `±${harmonyAngles.analog}°`
+    : h.key === 'square' ? `${harmonyAngles.square}°` : h.key === 'comp' ? '180°' : '120°';
+  const read = svgEl('text', { x: 50, y: 47, class: 'readout' }); read.textContent = txt;
+  const sub = svgEl('text', { x: 50, y: 58, class: 'readout-sub' }); sub.textContent = h.label.replace(' / rect.', '');
+  wheelSvg.append(read, sub);
+}
+// dragging: which dot (-1 = the base color), and the angle under the pointer
+let wheelDrag = null;
+const pointerDeg = e => {
+  const r = wheelSvg.getBoundingClientRect();
+  return (Math.atan2(e.clientX - (r.left + r.width / 2), -(e.clientY - (r.top + r.height / 2))) * 180 / Math.PI + 360) % 360;
+};
+wheelSvg.addEventListener('pointerdown', e => {
+  const dot = e.target.closest('.drag');
+  if (!dot || !labColor()) return;
+  wheelDrag = Number(dot.dataset.k);
+  wheelSvg.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+wheelSvg.addEventListener('pointermove', e => {
+  if (wheelDrag === null) return;
+  const sw = labColor(); if (!sw) return;
+  const deg = pointerDeg(e);
+  if (wheelDrag < 0) { setDraft({ hue: deg / 360 }); return; }   // turning the base color itself
+  const rel = (deg - sw.hue * 360 + 360) % 360;                       // 0..360 from the base color
+  const signed = rel > 180 ? rel - 360 : rel;                           // -180..180
+  const clamp = (v, lo, hi) => Math.round(Math.min(hi, Math.max(lo, v)));
+  if (activeHarmony === 'split') harmonyAngles.split = clamp(wheelDrag === 0 ? 180 - rel : rel - 180, 5, 90);
+  else if (activeHarmony === 'analog') harmonyAngles.analog = clamp(wheelDrag === 0 ? -signed : signed, 5, 90);
+  else if (activeHarmony === 'square') harmonyAngles.square = clamp(wheelDrag === 0 ? rel : (rel - 180 + 360) % 360, 10, 170);
+  renderEditor();
+});
+const endWheelDrag = () => {
+  if (wheelDrag === null) return;
+  wheelDrag = null;
+  try { localStorage.setItem('pb-harmony-angles', JSON.stringify(harmonyAngles)); } catch {}
+};
+wheelSvg.addEventListener('pointerup', endWheelDrag);
+wheelSvg.addEventListener('pointercancel', endWheelDrag);
+
+// The Color lab works on a draft of the selected color: playing with it leaves the palette
+// alone until Replace swatch. The draft is dropped when another slot is picked or the slot
+// itself changes (undo, clear, image pick...).
+const labColor = () => draft || swatches[selected];
+function setDraft(part) {
+  const base = labColor() || { hue: 0, saturation: 0, brightness: 0.5 };
+  draft = { hue: base.hue, saturation: base.saturation, brightness: base.brightness, ...part };
+  draftOf = swatches[selected]; draftSlot = selected;
+  const orig = swatches[selected];
+  if (orig && toHex(orig) === toHex(draft)) draft = null;   // back where it started: nothing to save
+  renderEditor();
+}
+function renderEditor() {
+  if (draft && (draftSlot !== selected || draftOf !== swatches[selected])) draft = null;
+  const sw = labColor(), orig = swatches[selected];
+  [...harmonyBox.children].forEach((row, r) => {
+    const turns = HARMONIES[r].turns(), cols = sw ? [sw, ...harmonyColors(sw, turns)] : [];
+    row.querySelector('.hname').setAttribute('aria-pressed', HARMONIES[r].key === activeHarmony);
+    [...row.querySelector('.hchips').children].forEach((b, k) => {
+      const hx = sw ? toHex(cols[k]) : '';
+      b.style.background = hx;
+      b.dataset.hex = hx;
+      if (k) b.disabled = !sw;
+      b.title = !sw ? '' : k ? `Add ${hx}` : `Selected color ${hx}`;
+      b.setAttribute('aria-label', b.title || 'No color selected');
+    });
+    row.querySelector('.add').disabled = !sw;
+  });
+  renderWheel(sw);
+  fillChipRow(hueBox, sw, sw && huesOf(sw), 0);
+  fillChipRow(shadeBox, sw, sw && shadesOf(sw), 3);
+  fillChipRow(toneBox, sw, sw && tonesOf(sw), 6);
+  $('clearBtn').disabled = !orig;
+  const view = sw || { hue: 0, saturation: 0, brightness: 0.5 };
+  const hex = sw ? toHex(sw) : '';
+  // two bars: the slot's saved color on top, the lab's color (maybe not saved yet) below
+  $('chipSaved').style.background = orig ? toHex(orig) : '';
+  $('chipSavedText').textContent = `Slot ${selected + 1} · ` + (orig ? [swName(orig), toHex(orig)].filter(Boolean).join(' · ') : 'empty');
+  $('chip').style.background = hex;
+  $('chipText').textContent = !sw ? 'Lab · pick a color to fill the slot' : `Lab · ${hex}` + (draft ? ' · not saved' : '');
+  const rb = $('replaceBtn'), locked = isLocked(selected);
+  rb.textContent = orig ? 'Replace swatch' : 'Add to slot';
+  rb.disabled = !draft || locked;
+  rb.classList.toggle('primary', !!draft && !locked);
+  rb.title = locked ? 'This color is locked. Unlock it to replace it.' : draft ? `Save ${hex} into slot ${selected + 1} (Enter)` : 'Change the color here first';
+  $('swName').disabled = !orig;
+  $('pinBtn').disabled = !sw;
+  if (document.activeElement !== $('swName')) $('swName').value = swName(orig);
+  $('picker').value = sw ? hex.toLowerCase() : '#808080';
+  if (document.activeElement !== $('hex')) $('hex').value = hex;
+  // 360° and 0° are the same red: leave the knob at the right end if it's there
+  const hDeg = Math.round(view.hue * 360) % 360;
+  if (!(hDeg === 0 && $('h').value === '360')) $('h').value = hDeg;
+  $('s').value = Math.round(view.saturation * 100);
+  $('b').value = Math.round(view.brightness * 100);
+  // the typing boxes follow the sliders (leaving alone the one being typed in)
+  ['h', 's', 'b'].forEach(id => { if (document.activeElement !== $(id + 'Num')) $(id + 'Num').value = $(id).value; });
+  // slider tracks show what each slider would do
+  const H = view.hue, S = view.saturation, B = view.brightness;
+  const rgb = (h, s, b) => `rgb(${hsbToRgb(h, s, b).join(',')})`;
+  $('h').style.background = `linear-gradient(to right, ${[0,1,2,3,4,5,6].map(k => rgb(k / 6 % 1, Math.max(S, .15), Math.max(B, .3))).join(',')})`;
+  $('s').style.background = `linear-gradient(to right, ${rgb(H, 0, B)}, ${rgb(H, 1, B)})`;
+  $('b').style.background = `linear-gradient(to right, #000, ${rgb(H, S, 1)})`;
+}
+
+// Change the selected slot's color. Refuses (and returns false) when the slot is locked.
+function setSelected(sw) {
+  if (isLocked(selected)) {
+    toast(`Slot ${selected + 1} is locked. Unlock it to change its color.`);
+    renderEditor();
+    return false;
+  }
+  const old = swatches[selected] || {};
+  swatches[selected] = { ...old, alpha: old.alpha ?? 1, colorSpace: old.colorSpace ?? 0, ...sw };
+  isExample = false;
+  render();
+  return true;
+}
+
+function moveSlot(from, to, insert = $('dragInsert').checked) {
+  if (insert) {
+    // take it out and slot it in, shifting the colors in between along by one
+    const [item] = swatches.splice(from, 1);
+    swatches.splice(to, 0, item);
+  } else {
+    const tmp = swatches[to]; swatches[to] = swatches[from]; swatches[from] = tmp;
+  }
+  multi = new Set(); selected = anchor = to; render();
+}
+
+// clear the selected slots, leaving locked ones alone
+function clearSelection() {
+  const sel = selection(), skipped = sel.filter(isLocked).length;
+  sel.forEach(i => { if (!isLocked(i)) swatches[i] = null; });
+  render();
+  if (skipped) toast(`${skipped} locked color${skipped === 1 ? ' was' : 's were'} kept. Unlock to clear.`);
+}
+
+// ---- palette tools ----
+const GREY = 0.08;   // below this saturation a color counts as grey for hue sorting
+const sortKeys = {
+  // greys have no real hue, so they go after the colors, dark to light
+  hue: sw => sw.saturation < GREY || sw.brightness < 0.06 ? 2 + sw.brightness : sw.hue,
+  brightness: sw => rgbToOklab(swRgb(sw))[0],
+  saturation: sw => sw.saturation
+};
+$('sortBtn').addEventListener('click', () => {
+  const slots = (multi.size > 1 ? selection() : [...Array(SLOTS).keys()]).filter(i => !isLocked(i));
+  const key = sortKeys[$('sortBy').value];
+  const cols = slots.map(i => swatches[i]).filter(Boolean).sort((a, b) => key(a) - key(b));
+  commitNow();
+  slots.forEach((i, k) => { swatches[i] = cols[k] || null; });
+  isExample = false; render(); commitNow();
+  toast(`Sorted by ${$('sortBy').selectedOptions[0].text.toLowerCase()}. Undo puts it back.`);
+});
+$('lockBtn').addEventListener('click', () => {
+  const filled = selection().filter(i => swatches[i]);
+  const lock = !filled.every(isLocked);
+  filled.forEach(i => { if (lock) swatches[i]._locked = true; else delete swatches[i]._locked; });
+  render();
+});
+$('blendBtn').addEventListener('click', () => {
+  const sel = selection(), a = sel[0], b = sel[sel.length - 1];
+  if (!swatches[a] || !swatches[b]) { toast('Blend needs a color in the first and last selected slots.'); return; }
+  const la = rgbToOklab(swRgb(swatches[a])), lb = rgbToOklab(swRgb(swatches[b]));
+  commitNow();
+  for (let k = a + 1; k < b; k++) {
+    if (isLocked(k)) continue;
+    const t = (k - a) / (b - a);
+    swatches[k] = fromRgb(oklabToRgb(la.map((v, j) => v + (lb[j] - v) * t)));
+  }
+  isExample = false; render(); commitNow();
+  toast(`Blended slots ${a + 1} to ${b + 1}.`);
+});
+$('previewMode').addEventListener('change', e => {
+  document.body.classList.remove('pv-grey', 'pv-protan', 'pv-deutan', 'pv-tritan');
+  if (e.target.value) {
+    document.body.classList.add('pv-' + e.target.value);
+    toast('Preview only. Your colors and exported file are unchanged.');
+  }
+});
+
+// ---- editor events ----
+$('picker').addEventListener('input', e => setDraft(rgbToHsb(...parseHex(e.target.value))));
+$('hex').addEventListener('input', e => { const rgb = parseHex(e.target.value); if (rgb) setDraft(rgbToHsb(...rgb)); });
+$('hex').addEventListener('blur', renderEditor);
+$('hex').addEventListener('keydown', e => { if (e.key === 'Enter' && !$('replaceBtn').disabled) $('replaceBtn').click(); });
+$('replaceBtn').addEventListener('click', () => {
+  if (!draft) return;
+  const was = swatches[selected], hex = toHex(draft);
+  if (setSelected(draft)) toast(`${was ? 'Replaced' : 'Added'} slot ${selected + 1} with ${hex}. Undo brings back the old one.`);
+});
+const fineTune = () => setDraft({
+  hue: (Number($('h').value) % 360) / 360, saturation: $('s').value / 100, brightness: $('b').value / 100
+});
+['h', 's', 'b'].forEach(id => {
+  const range = $(id), box = $(id + 'Num');
+  range.addEventListener('input', fineTune);
+  // typing: out-of-range numbers are capped; leaving the box tidies it up; Enter saves like the hex box
+  box.addEventListener('input', () => {
+    if (box.value.trim() === '' || !Number.isFinite(Number(box.value))) return;
+    range.value = Math.min(Number(range.max), Math.max(0, Math.round(Number(box.value))));
+    fineTune();
+  });
+  box.addEventListener('change', () => { box.value = range.value; });
+  box.addEventListener('keydown', e => { if (e.key === 'Enter' && !$('replaceBtn').disabled) { box.value = range.value; $('replaceBtn').click(); } });
+});
+$('swName').addEventListener('input', e => {
+  const sw = swatches[selected]; if (!sw) return;
+  if (e.target.value.trim()) sw[nameKey] = e.target.value; else delete sw[nameKey];
+  isExample = false; render();
+});
+$('swName').addEventListener('blur', renderEditor);
+$('clearBtn').addEventListener('click', clearSelection);
+$('paletteName').addEventListener('input', e => { name = e.target.value; isExample = false; scheduleCommit(); });
+// ---- adjust all: hue shift, saturation and lightness (HSL) for every unlocked color ----
+// Each move is applied to the palette as it was when adjusting began (adjBase), so
+// dragging back to 0 gives the original colors. If the same colors are only moved
+// (Sort, dragging), the originals move with them; any other change resets the sliders.
+const adjKey = sw => `${sw.hue},${sw.saturation},${sw.brightness},${swName(sw)}`;
+function followAdjust() {
+  const filled = swatches.filter(Boolean);
+  const moved = filled.length === adjMap.size && filled.every(sw => adjMap.get(sw)?.[1] === adjKey(sw));
+  if (moved) adjBase = swatches.map(sw => sw && adjMap.get(sw)[0]);
+  else resetAdjust();
+}
+function hsbToHsl(s, v) { const l = v * (1 - s / 2); return [l, l === 0 || l === 1 ? 0 : (v - l) / Math.min(l, 1 - l)]; }
+function hslToHsb(s, l) { const v = l + s * Math.min(l, 1 - l); return [v === 0 ? 0 : 2 * (1 - l / v), v]; }
+const clamp01 = x => Math.min(1, Math.max(0, x));
+function resetAdjust() {
+  adjBase = null; adjMap = new Map();
+  for (const k of ['H', 'S', 'L']) $('adj' + k).value = 0;
+  showAdjust();
+}
+// copy slider values into the number boxes (leaving alone the one being typed in)
+function showAdjust() {
+  let any = false;
+  for (const k of ['H', 'S', 'L']) {
+    const box = $('adj' + k + 'Num');
+    if (box !== document.activeElement) box.value = $('adj' + k).value;
+    if (+$('adj' + k).value) any = true;
+  }
+  $('adjReset').disabled = !any;
+}
+function applyAdjust() {
+  if (!adjBase) { commitNow(); adjBase = JSON.parse(JSON.stringify(swatches)); }
+  const dh = $('adjH').value / 360, ds = $('adjS').value / 100, dl = $('adjL').value / 100;
+  const prev = swatches;
+  swatches = adjBase.map((sw, i) => {
+    if (!sw || isLocked(i)) return prev[i];
+    const { _locked, ...orig } = sw;   // the lock lives on the current swatch, not the saved original
+    let [l, s] = hsbToHsl(orig.saturation, orig.brightness);
+    s = clamp01(s * (1 + ds));                          // scales, so greys stay grey
+    l = clamp01(dl > 0 ? l + (1 - l) * dl : l * (1 + dl)); // +100 = white, -100 = black
+    const [sat, bri] = hslToHsb(s, l);
+    return { ...orig, hue: ((orig.hue + dh) % 1 + 1) % 1, saturation: clamp01(sat), brightness: clamp01(bri) };
+  });
+  adjMap = new Map();
+  swatches.forEach((sw, i) => { if (sw) adjMap.set(sw, [adjBase[i], adjKey(sw)]); });
+  showAdjust(); isExample = false; render();
+}
+// Reset: back to the colors from before adjusting (one Undo step)
+$('adjReset').addEventListener('click', () => {
+  if (!adjBase) return;
+  for (const k of ['H', 'S', 'L']) $('adj' + k).value = 0;
+  applyAdjust(); commitNow();
+});
+for (const k of ['H', 'S', 'L']) {
+  const range = $('adj' + k), box = $('adj' + k + 'Num');
+  // no commit on 'change': arrow keys fire it on every press, so steps are grouped by the usual pause instead
+  range.addEventListener('input', applyAdjust);
+  // typed values apply as you type (half-typed ones like "-" wait); Enter or leaving the box tidies it up
+  box.addEventListener('input', () => {
+    const v = Number(box.value);
+    if (box.value.trim() === '' || !Number.isFinite(v)) return;
+    range.value = Math.min(+range.max, Math.max(+range.min, Math.round(v)));
+    applyAdjust();
+  });
+  box.addEventListener('change', () => { box.value = range.value; commitNow(); });
+}
+
+// ---- preset palettes: each color goes to its own slot (so rows line up); locked slots keep theirs ----
+const hsb = (h, s, b) => ({ hue: h, saturation: s, brightness: b, alpha: 1, colorSpace: 0 });
+const PRESETS = {
+  // one row each, light to dark: neutral (white to black), cool (blue-grey), warm (brown-grey);
+  // the tinted rows stop short of white/black so they don't repeat the neutral ends
+  grays: () => [[0, 0, 1, 0], [0.6, 0.12, 0.95, 0.12], [0.08, 0.14, 0.95, 0.12]].flatMap(([h, s, hi, lo]) =>
+    Array.from({ length: 10 }, (_, i) => hsb(h, s, hi - (hi - lo) * i / 9))),
+  // red, yellow, green, cyan, blue, magenta; each pale tint -> full -> deep shade
+  basic: () => [0, 1, 2, 3, 4, 5].flatMap(k =>
+    [[0.3, 1], [0.6, 1], [1, 1], [1, 0.7], [1, 0.42]].map(([s, b]) => hsb(k / 6, s, b))),
+  random: () => Array.from({ length: SLOTS }, () => hsb(Math.random(), Math.random(), Math.random())),
+};
+document.querySelectorAll('[data-preset]').forEach(btn => btn.addEventListener('click', () => {
+  commitNow();
+  const label = btn.textContent;
+  PRESETS[btn.dataset.preset]().forEach((c, i) => { if (!isLocked(i)) swatches[i] = c; });
+  multi = new Set(); selected = anchor = 0;
+  name = label; isExample = true;
+  render(); commitNow();
+  toast(`Loaded ${label}${swatches.some((_, i) => isLocked(i)) ? ' (locked colors kept)' : ''}. Undo brings back yours.`);
+}));
+grid.addEventListener('keydown', e => {
+  const cols = 10; let n = selected;
+  if (e.key === 'ArrowRight') n++; else if (e.key === 'ArrowLeft') n--;
+  else if (e.key === 'ArrowDown') n += cols; else if (e.key === 'ArrowUp') n -= cols;
+  else if (e.key === 'Delete' || e.key === 'Backspace') { clearSelection(); e.preventDefault(); return; }
+  else return;
+  e.preventDefault();
+  multi = new Set();
+  selected = anchor = Math.min(SLOTS - 1, Math.max(0, n)); render(); grid.children[selected].focus();
+});
+$('pasteBtn').addEventListener('click', () => {
+  const found = $('pasteBox').value.match(/#?\b[0-9a-f]{6}\b|#[0-9a-f]{3}\b/gi) || [];
+  if (!found.length) { toast('No hex codes found. Use codes like #F2C14E.'); return; }
+  commitNow();
+  const used = fillUnlocked(found.map(fromHex).filter(Boolean));
+  isExample = false; render(); commitNow();
+  toast(`Palette filled with ${used} color${used === 1 ? '' : 's'}` + (used < found.length ? ` (${found.length - used} didn't fit)` : '') + '. Undo brings back the old one.');
+});
+// Put colors into the unlocked slots in order; unlocked slots left over are emptied.
+// Returns how many colors were placed.
+function fillUnlocked(cols, slots = [...Array(SLOTS).keys()]) {
+  let k = 0;
+  for (const i of slots) {
+    if (isLocked(i)) continue;
+    swatches[i] = k < cols.length ? cols[k++] : null;
+  }
+  multi = new Set(); selected = anchor = 0;
+  return k;
+}
+$('copyBtn').addEventListener('click', () => {
+  const text = swatches.filter(Boolean).map(toHex).join(' ');
+  if (!text) { toast('The palette is empty, so there is nothing to copy.'); return; }
+  const box = $('pasteBox');
+  box.value = text;
+  const n = swatches.filter(Boolean).length;
+  const selectBox = () => { box.focus(); box.select(); toast('Hex codes are selected in the box. Press Ctrl+C to copy.'); };
+  try {
+    navigator.clipboard.writeText(text)
+      .then(() => toast(`Copied ${n} hex code${n === 1 ? '' : 's'}. They're in the box too.`))
+      .catch(selectBox);
+  } catch { selectBox(); }
+});
+$('clearConfirm').addEventListener('change', e => { $('newBtn').disabled = !e.target.checked; });
+$('newBtn').addEventListener('click', () => {
+  if (!$('clearConfirm').checked) return;
+  $('clearConfirm').checked = false; $('newBtn').disabled = true;
+  const kept = swatches.filter(sw => sw?._locked).length;
+  toast('Palette cleared' + (kept ? `, except ${kept} locked color${kept === 1 ? '' : 's'}` : '') + '. Press Undo to bring it back.');
+  fileWrapper = null; paletteIndex = 0; paletteExtra = {}; nameKey = 'name';
+  name = ''; fillUnlocked([]); isExample = false; render();
+});
+
+// ---- open ----
+async function openFile(file) {
+  try {
+    const zip = await JSZip.loadAsync(file);
+    const entry = zip.file('Swatches.json') || Object.values(zip.files).find(f => /\.json$/i.test(f.name) && !f.dir);
+    if (!entry) throw new Error('no-json');
+    const data = JSON.parse(await entry.async('string'));
+    const list = Array.isArray(data) ? data : [data];
+    const pal = list[0];
+    if (!pal || !Array.isArray(pal.swatches)) throw new Error('bad-json');
+    commitNow();
+    fileWrapper = data; paletteIndex = 0;
+    const { name: n, swatches: sws, ...rest } = pal;
+    paletteExtra = rest;
+    name = n == null || n === '' ? file.name.replace(/\.(swatches|zip)$/i, '') : String(n);
+    // locked colors stay in their slots; a file color meant for a locked slot moves to the next free one
+    const kept = swatches.map(sw => sw?._locked ? sw : null);
+    swatches = kept.slice();
+    const bumped = [];
+    // keep a color only if hue, saturation and brightness are all numbers; pull them into 0–1
+    let skipped = 0;
+    sws.slice(0, SLOTS).forEach((sw, i) => {
+      if (!sw) return;
+      const raw = [sw.hue, sw.saturation, sw.brightness];
+      if (raw.some(v => v == null || v === '' || !Number.isFinite(Number(v)))) { skipped++; return; }
+      const [h, s, b] = raw.map(Number);
+      // (a hue already in 0–1 is kept exactly, so re-opening a saved file gives back the same colors)
+      const col = { ...sw, hue: h >= 0 && h < 1 ? h : ((h % 1) + 1) % 1, saturation: Math.min(1, Math.max(0, s)), brightness: Math.min(1, Math.max(0, b)) };
+      if (kept[i]) bumped.push(col); else swatches[i] = col;
+    });
+    let lost = 0;
+    for (const col of bumped) {
+      const free = swatches.findIndex(s => !s);
+      if (free < 0) lost++; else swatches[free] = col;
+    }
+    const named = swatches.find(sw => sw && Object.keys(sw).some(k => !KNOWN_KEYS.includes(k) && typeof sw[k] === 'string'));
+    nameKey = named ? Object.keys(named).find(k => !KNOWN_KEYS.includes(k) && typeof named[k] === 'string') : 'name';
+    multi = new Set(); selected = anchor = 0; isExample = false; render();
+    let msg = `Opened “${name}”`;
+    if (list.length > 1) msg += ` (this file has ${list.length} palettes; editing the first)`;
+    if (sws.length > SLOTS) msg += ` (only the first ${SLOTS} colors are shown)`;
+    if (skipped) msg += ` (${skipped} broken color${skipped === 1 ? '' : 's'} left out)`;
+    const nKept = kept.filter(Boolean).length;
+    if (nKept) msg += ` (${nKept} locked color${nKept === 1 ? '' : 's'} kept` + (bumped.length - lost ? `, ${bumped.length - lost} moved to a free slot` : '') + (lost ? `, ${lost} didn't fit` : '') + ')';
+    toast(msg);
+  } catch (err) {
+    toast("That file couldn't be read. Pick a .swatches file exported from Procreate.");
+  }
+}
+$('fileInput').addEventListener('change', e => { if (e.target.files[0]) openFile(e.target.files[0]); e.target.value = ''; });
+document.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); });
+document.addEventListener('drop', e => {
+  if (!e.dataTransfer.files.length) return;
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f.type.startsWith('image/')) loadImage(f); else openFile(f);
+});
+
+// ---- pick from image ----
+// `canvas` holds the image's own pixels off screen (used for sampling);
+// `view` is the visible window that shows it zoomed and panned.
+const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d', { willReadFrequently: true });
+const view = $('imgView'), vctx = view.getContext('2d'), loupe = $('loupe'), stage = $('stage');
+let hasImage = false, zoom = 1, panX = 0, panY = 0;
+
+function loadImage(file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const scale = Math.min(1, 3000 / Math.max(img.width, img.height));
+    canvas.width = Math.round(img.width * scale); canvas.height = Math.round(img.height * scale);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    hasImage = true;
+    view.hidden = false; $('zoomBar').hidden = false; $('imgEmpty').hidden = true;
+    $('fillImgBtn').disabled = false; $('clearImgBtn').hidden = false;
+    sizeView(); fitImage();
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast("That image couldn't be opened. Try a PNG or JPG."); };
+  img.src = url;
+}
+function sizeView() {
+  const dpr = window.devicePixelRatio || 1;
+  view.width = Math.max(1, Math.round(stage.clientWidth * dpr));
+  view.height = Math.max(1, Math.round(stage.clientHeight * dpr));
+}
+const fitZoom = () => Math.min(stage.clientWidth / canvas.width, stage.clientHeight / canvas.height);
+function fitImage() {
+  zoom = fitZoom();
+  panX = (stage.clientWidth - canvas.width * zoom) / 2;
+  panY = (stage.clientHeight - canvas.height * zoom) / 2;
+  drawView();
+}
+function drawView() {
+  if (!hasImage) return;
+  const dpr = view.width / Math.max(1, stage.clientWidth);
+  vctx.setTransform(1, 0, 0, 1, 0, 0);
+  vctx.clearRect(0, 0, view.width, view.height);
+  // show crisp pixels when zoomed in close
+  vctx.imageSmoothingEnabled = zoom < 3;
+  vctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, panX * dpr, panY * dpr);
+  vctx.drawImage(canvas, 0, 0);
+  $('zoomLevel').textContent = Math.round(zoom * 100) + '%';
+}
+// zoom while keeping the point under (sx, sy) in place
+function zoomAt(factor, sx, sy) {
+  // tiny images fit above 32×, so the cap never sits below the fit zoom
+  const nz = Math.min(Math.max(32, fitZoom()), Math.max(fitZoom() / 2, zoom * factor));
+  panX = sx - (sx - panX) * nz / zoom;
+  panY = sy - (sy - panY) * nz / zoom;
+  zoom = nz; drawView();
+}
+const zoomCentre = f => zoomAt(f, stage.clientWidth / 2, stage.clientHeight / 2);
+$('zoomIn').addEventListener('click', () => zoomCentre(1.5));
+$('zoomOut').addEventListener('click', () => zoomCentre(1 / 1.5));
+$('zoomFit').addEventListener('click', fitImage);
+// on resize: a fitted image re-fits; otherwise keep the same spot in the middle of the box
+let stageW = stage.clientWidth, stageH = stage.clientHeight;
+new ResizeObserver(() => {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  if (!w || !h) return;   // hidden: keep the last real size
+  if (hasImage) {
+    const wasFit = Math.abs(zoom - Math.min(stageW / canvas.width, stageH / canvas.height)) < 1e-6 * zoom + 1e-9;
+    sizeView();
+    if (wasFit) fitImage();
+    else { panX += (w - stageW) / 2; panY += (h - stageH) / 2; drawView(); }
+  }
+  stageW = w; stageH = h;
+}).observe(stage);
+view.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+
+function sampleAt(e) {
+  const r = stage.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  const x = Math.floor((sx - panX) / zoom), y = Math.floor((sy - panY) / zoom);
+  if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) { loupe.hidden = true; return null; }
+  // average a 3×3 patch so one stray pixel doesn't win, unless zoomed in enough to aim at one
+  const rad = zoom >= 4 ? 0 : 1;
+  const x0 = Math.max(0, x - rad), y0 = Math.max(0, y - rad);
+  const w = Math.min(rad * 2 + 1, canvas.width - x0), h = Math.min(rad * 2 + 1, canvas.height - y0);
+  const d = ctx.getImageData(x0, y0, w, h).data;
+  let rr = 0, gg = 0, bb = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 10) continue; rr += d[i]; gg += d[i + 1]; bb += d[i + 2]; n++; }
+  if (!n) { loupe.hidden = true; return null; }
+  const rgb = [rr / n, gg / n, bb / n].map(Math.round);
+  loupe.style.left = sx + 'px'; loupe.style.top = sy + 'px';
+  // split loupe: new color on top, the slot's current color underneath
+  const cur = swatches[selected] ? toHex(swatches[selected]) : 'var(--slot-empty)';
+  loupe.style.background = `linear-gradient(to bottom, rgb(${rgb.join(',')}) 50%, ${cur} 50%)`;
+  loupe.hidden = false;
+  return rgb;
+}
+
+// A tap or click without moving picks a color; dragging pans; two fingers pinch-zoom.
+const pointers = new Map();
+let downAt = null, moved = false, pinchDist = 0;
+view.addEventListener('pointerdown', e => {
+  view.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1) { downAt = { x: e.clientX, y: e.clientY }; moved = false; }
+  else { moved = true; pinchDist = 0; loupe.hidden = true; }
+});
+view.addEventListener('pointermove', e => {
+  const prev = pointers.get(e.pointerId);
+  if (!prev) { if (e.pointerType === 'mouse') sampleAt(e); return; }
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size >= 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    const r = stage.getBoundingClientRect();
+    if (pinchDist) zoomAt(d / pinchDist, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+    pinchDist = d;
+    return;
+  }
+  if (!moved && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 4) moved = true;
+  if (moved) {
+    panX += e.clientX - prev.x; panY += e.clientY - prev.y;
+    view.classList.add('grabbing'); loupe.hidden = true; drawView();
+  }
+});
+function endPointer(e) {
+  if (!pointers.has(e.pointerId)) return;
+  const wasOnly = pointers.size === 1;
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinchDist = 0;
+  view.classList.remove('grabbing');
+  if (!wasOnly || moved || e.type !== 'pointerup') return;
+  const rgb = sampleAt(e);
+  if (!rgb) return;
+  if (e.pointerType !== 'mouse') setTimeout(() => { loupe.hidden = true; }, 600);
+  setDraft(rgbToHsb(...rgb));   // into the Color lab's lower bar; Replace swatch saves it
+}
+view.addEventListener('pointerup', endPointer);
+view.addEventListener('pointercancel', endPointer);
+view.addEventListener('pointerleave', () => { if (!pointers.size) loupe.hidden = true; });
+// Fill from image: sample pixels, keep the ones that suit the mood, split them into ~3×
+// `count` color clusters (k-means in OKLab), then choose `count` of them, each time taking
+// the cluster that is both common and most unlike the ones already chosen, so small accents
+// get a slot and near-duplicates don't. Each uses the real pixel nearest its cluster's centre
+// so no invented colors appear. Most common colors come first.
+const MOODS = {
+  colorful: h => h.saturation * (h.brightness > 0.3 ? 1 : 0.2),
+  bright:   h => h.brightness * 0.6 + h.saturation * 0.4,
+  muted:    h => 1 - Math.abs(h.saturation - 0.25) * 2 - Math.abs(h.brightness - 0.6),
+  deep:     h => h.saturation - Math.abs(h.brightness - 0.4),
+  dark:     h => 1 - h.brightness
+};
+function extractColors(count, mood) {
+  const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const px = canvas.width * canvas.height;
+  let pool = [];
+  for (let t = 0; t < 9000; t++) {
+    const i = Math.floor(Math.random() * px) * 4;
+    if (d[i + 3] > 200) pool.push([d[i], d[i + 1], d[i + 2]]);
+  }
+  if (!pool.length) return [];
+  if (MOODS[mood]) {
+    const score = MOODS[mood];
+    pool = pool.map(rgb => ({ rgb, s: score(rgbToHsb(...rgb)) }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, Math.max(count * 20, Math.round(pool.length * 0.3)))
+      .map(p => p.rgb);
+  }
+  const pts = pool.map(rgbToOklab);
+  const k = Math.min(pts.length, count * 3);
+  // k-means++ start: spread the first centres out, with some randomness for a fresh mix each time
+  const centres = [pts[Math.floor(Math.random() * pts.length)]];
+  const near = pts.map(p => labDist2(p, centres[0]));
+  while (centres.length < k) {
+    const total = near.reduce((a, b) => a + b, 0);
+    if (!total) break;   // every remaining pixel is identical to a centre
+    let r = Math.random() * total, i = 0;
+    while ((r -= near[i]) > 0 && i < pts.length - 1) i++;
+    centres.push(pts[i]);
+    pts.forEach((p, j) => { near[j] = Math.min(near[j], labDist2(p, pts[i])); });
+  }
+  let owner = new Array(pts.length).fill(0);
+  for (let iter = 0; iter < 8; iter++) {
+    owner = pts.map(p => { let best = 0, bd = Infinity; centres.forEach((c, k) => { const dd = labDist2(p, c); if (dd < bd) { bd = dd; best = k; } }); return best; });
+    centres.forEach((c, k) => {
+      const mine = pts.filter((_, j) => owner[j] === k);
+      if (mine.length) centres[k] = [0, 1, 2].map(a => mine.reduce((s, p) => s + p[a], 0) / mine.length);
+    });
+  }
+  const clusters = centres.map((c, k) => {
+    let best = -1, bd = Infinity;
+    pts.forEach((p, j) => { if (owner[j] === k) { const dd = labDist2(p, c); if (dd < bd) { bd = dd; best = j; } } });
+    return { rgb: best >= 0 ? pool[best] : oklabToRgb(c), lab: best >= 0 ? pts[best] : c, size: owner.filter(o => o === k).length };
+  }).filter(c => c.size).sort((a, b) => b.size - a.size);
+  if (clusters.filter(c => c.size >= 3).length >= count) clusters.splice(0, clusters.length, ...clusters.filter(c => c.size >= 3));   // under 3 pixels is noise, not an accent
+  // Choose: start with the most common, then repeatedly add the cluster with the best
+  // distance-to-chosen × size^0.3 (size counts, but much less than being different)
+  const chosen = clusters.splice(0, 1);
+  const gap = clusters.map(c => labDist2(c.lab, chosen[0].lab));
+  while (chosen.length < count && clusters.length) {
+    let bi = 0, bs = -1;
+    clusters.forEach((c, i) => { const s = Math.sqrt(gap[i]) * Math.pow(c.size, 0.3); if (s > bs) { bs = s; bi = i; } });
+    const [pick] = clusters.splice(bi, 1); gap.splice(bi, 1);
+    chosen.push(pick);
+    clusters.forEach((c, i) => { gap[i] = Math.min(gap[i], labDist2(c.lab, pick.lab)); });
+  }
+  return chosen.sort((a, b) => b.size - a.size).map(c => c.rgb);
+}
+// "Colors": the preset buttons and the number box stay in step
+const fillCountValue = () => {
+  const v = Number($('fillCount').value);
+  return $('fillCount').value.trim() === '' || !Number.isFinite(v) ? SLOTS : Math.min(SLOTS, Math.max(1, Math.round(v)));
+};
+document.querySelectorAll('input[name="fillPreset"]').forEach(r => r.addEventListener('change', () => { $('fillCount').value = r.value; }));
+$('fillCount').addEventListener('input', () => {
+  const v = String(fillCountValue());
+  document.querySelectorAll('input[name="fillPreset"]').forEach(r => { r.checked = r.value === v; });
+});
+$('fillCount').addEventListener('blur', () => { $('fillCount').value = fillCountValue(); });
+$('fillImgBtn').addEventListener('click', () => {
+  // A limited palette of N colors: the first N slots, top row to bottom. Locked colors in
+  // those slots count toward N; every other unlocked slot is emptied.
+  const n = fillCountValue();
+  const open = [...Array(n).keys()].filter(i => !isLocked(i)).length;
+  if (!open) { toast(`The first ${n} slots are all locked. Unlock some or pick a bigger number.`); return; }
+  const cols = extractColors(open, $('mood').value);
+  if (!cols.length) { toast('No solid colors found in this image.'); return; }
+  commitNow();
+  fillUnlocked(cols.map(fromRgb));
+  isExample = false; render(); commitNow();
+  const made = swatches.slice(0, n).filter(Boolean).length;
+  toast(`Made a palette of ${made} color${made === 1 ? '' : 's'} (${$('mood').selectedOptions[0].text.toLowerCase()}). Press again for a new mix, or Undo.`);
+});
+$('clearImgBtn').addEventListener('click', () => {
+  hasImage = false;
+  canvas.width = canvas.height = 0;
+  vctx.setTransform(1, 0, 0, 1, 0, 0); vctx.clearRect(0, 0, view.width, view.height);
+  view.hidden = true; $('zoomBar').hidden = true; loupe.hidden = true; $('imgEmpty').hidden = false;
+  $('fillImgBtn').disabled = true; $('clearImgBtn').hidden = true;
+});
+$('imgInput').addEventListener('change', e => { if (e.target.files[0]) loadImage(e.target.files[0]); e.target.value = ''; });
+document.addEventListener('paste', e => {
+  if (e.target === $('pasteBox')) return;
+  const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (item) { e.preventDefault(); loadImage(item.getAsFile()); }
+});
+
+// ---- save ----
+function buildJson() {
+  const clean = sw => { if (!sw) return null; const { _locked, ...rest } = sw; return rest; };
+  const pal = { ...paletteExtra, name: name.trim() || 'Untitled', swatches: swatches.map(clean) };
+  // trim trailing empty slots, as Procreate's own exports do
+  while (pal.swatches.length && !pal.swatches[pal.swatches.length - 1]) pal.swatches.pop();
+  if (Array.isArray(fileWrapper)) { const out = fileWrapper.slice(); out[paletteIndex] = pal; return JSON.stringify(out); }
+  return JSON.stringify([pal]);
+}
+// save a file with a plain link download
+function saveBlob(blob, file) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = file;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast(`Saved ${file}`);
+}
+
+$('saveBtn').addEventListener('click', async () => {
+  if (!swatches.some(Boolean)) { toast('Add at least one color before saving.'); return; }
+  const zip = new JSZip();
+  zip.file('Swatches.json', buildJson());
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  saveBlob(blob, (name.trim() || 'Untitled').replace(/[\\/:*?"<>|]+/g, '-') + '.swatches');
+});
+
+// ---- preview card: a PNG of the palette (name on top, swatches in their slots, hex under each) ----
+const CARD = { cols: 10, sw: 96, gap: 18, pad: 56, titleH: 64, labelH: 26, nameH: 18, scale: 2 };
+async function drawCard() {
+  const last = swatches.reduce((m, sw, i) => sw ? i : m, -1);
+  const rows = Math.floor(last / CARD.cols) + 1;              // trailing empty rows are left off
+  const hasNames = swatches.some(sw => sw && swName(sw));
+  const cellH = CARD.sw + CARD.labelH + (hasNames ? CARD.nameH : 0);
+  const W = CARD.pad * 2 + CARD.cols * CARD.sw + (CARD.cols - 1) * CARD.gap;
+  const H = CARD.pad * 2 + CARD.titleH + rows * cellH + (rows - 1) * CARD.gap;
+  const cv = document.createElement('canvas');
+  cv.width = W * CARD.scale; cv.height = H * CARD.scale;
+  const g = cv.getContext('2d'); g.scale(CARD.scale, CARD.scale);
+  await document.fonts.ready;
+  const css = getComputedStyle(document.documentElement);
+  const font = v => css.getPropertyValue(v).trim();
+  g.fillStyle = '#F6F5F2'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#1C1B1A'; g.textBaseline = 'alphabetic';
+  g.font = `700 40px ${font('--font-display')}`;
+  g.fillText(name.trim() || 'Untitled', CARD.pad, CARD.pad + 38, W - CARD.pad * 2);
+  for (let i = 0; i <= last; i++) {
+    const sw = swatches[i]; if (!sw) continue;                // empty slots stay as blank space
+    const x = CARD.pad + (i % CARD.cols) * (CARD.sw + CARD.gap);
+    const y = CARD.pad + CARD.titleH + Math.floor(i / CARD.cols) * (cellH + CARD.gap);
+    g.beginPath(); g.roundRect(x, y, CARD.sw, CARD.sw, 12);
+    g.fillStyle = toHex(sw); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.12)'; g.lineWidth = 1; g.stroke();   // keeps white swatches visible
+    g.fillStyle = '#1C1B1A'; g.font = `500 15px ${font('--font-mono')}`;
+    g.fillText(toHex(sw), x, y + CARD.sw + 20, CARD.sw);
+    if (swName(sw)) {
+      g.fillStyle = '#6B6965'; g.font = `500 13px ${font('--font-body')}`;
+      g.fillText(swName(sw), x, y + CARD.sw + 20 + CARD.nameH, CARD.sw);
+    }
+  }
+  return new Promise(res => cv.toBlob(res, 'image/png'));
+}
+$('cardBtn').addEventListener('click', async () => {
+  if (!swatches.some(Boolean)) { toast('Add at least one color before saving a card.'); return; }
+  const blob = await drawCard();
+  saveBlob(blob, (name.trim() || 'Untitled').replace(/[\\/:*?"<>|]+/g, '-') + ' card.png');
+});
+
+let toastTimer;
+function toast(msg, ms = 4200) {
+  const t = $('toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, ms);
+}
+
+// ---- undo / redo ----
+// Each step is a snapshot of the palette. Changes are grouped until editing
+// pauses briefly, so one slider drag or one typed name is a single step.
+let steps = null, histIndex = 0, commitTimer;
+const snap = () => JSON.stringify({ name, swatches, nameKey });
+function commitNow() {
+  clearTimeout(commitTimer);
+  if (!steps) return;
+  const s = snap();
+  if (s === steps[histIndex]) return;
+  steps = steps.slice(0, histIndex + 1);
+  steps.push(s);
+  if (steps.length > 200) steps.shift();
+  histIndex = steps.length - 1;
+  updateHistoryButtons();
+}
+function scheduleCommit() {
+  if (!steps) return;
+  clearTimeout(commitTimer);
+  commitTimer = setTimeout(commitNow, 500);
+}
+function restore(i) {
+  histIndex = i;
+  const s = JSON.parse(steps[i]);
+  name = s.name; swatches = s.swatches; nameKey = s.nameKey;
+  isExample = false; render();
+  clearTimeout(commitTimer);
+  updateHistoryButtons();
+}
+function updateHistoryButtons() {
+  $('undoBtn').disabled = histIndex <= 0;
+  $('redoBtn').disabled = histIndex >= steps.length - 1;
+}
+function undo() { commitNow(); if (histIndex > 0) restore(histIndex - 1); }
+function redo() { commitNow(); if (histIndex < steps.length - 1) restore(histIndex + 1); }
+$('undoBtn').addEventListener('click', undo);
+$('redoBtn').addEventListener('click', redo);
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  // let text and number boxes keep their own typing undo; leave the palette alone behind the tips sheet
+  if (e.target.matches('input[type="text"], input[type="number"], textarea') || $('helpDlg').open) return;
+  const k = e.key.toLowerCase();
+  if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+});
+
+// ---- tips and shortcuts (Esc also closes it) ----
+$('helpBtn').addEventListener('click', () => $('helpDlg').showModal());
+$('helpClose').addEventListener('click', () => $('helpDlg').close());
+$('helpDlg').addEventListener('click', e => {   // a click outside the box closes it
+  const r = $('helpDlg').getBoundingClientRect();
+  if (e.target === $('helpDlg') && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) $('helpDlg').close();
+});
+
+// ---- collapsible Color lab parts (remembered in this browser) ----
+document.querySelectorAll('.lab-section').forEach(sec => {
+  const btn = sec.querySelector('.sec-toggle'), body = sec.querySelector('.sec-body'), key = 'pb-sec-' + sec.dataset.sec;
+  const set = open => { btn.setAttribute('aria-expanded', open); body.hidden = !open; };
+  try { if (localStorage.getItem(key) === 'closed') set(false); } catch {}
+  btn.addEventListener('click', () => {
+    const open = btn.getAttribute('aria-expanded') !== 'true';
+    set(open);
+    try { localStorage.setItem(key, open ? 'open' : 'closed'); } catch {}
+  });
+});
+
+// ---- theme: Dark/Light match Procreate's interface; Gray sits between ----
+const THEMES = ['dark', 'gray', 'light'];
+const applyTheme = t => document.documentElement.setAttribute('data-theme', t);
+// Dark until the viewer picks another (their choice is remembered in this browser; an old "auto" counts as Dark)
+let savedTheme = 'dark';
+try { const t = localStorage.getItem('pb-theme'); if (THEMES.includes(t)) savedTheme = t; } catch {}
+document.querySelectorAll('input[name="theme"]').forEach(r => {
+  r.checked = r.value === savedTheme;
+  r.addEventListener('change', () => {
+    applyTheme(r.value);
+    try { localStorage.setItem('pb-theme', r.value); } catch {}
+  });
+});
+applyTheme(savedTheme);
+
+loadBlank();
+steps = [snap()]; histIndex = 0; updateHistoryButtons();
+</script>
+</body>
+</html>
